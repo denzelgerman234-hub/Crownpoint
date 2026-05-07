@@ -1,0 +1,185 @@
+.page { min-height: 100vh; background: var(--green-deep); }
+
+.hero {
+  padding:    calc(var(--header-height, 88px) + 60px) var(--space-12) 80px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(6,26,16,0.2) 0%, rgba(6,26,16,0.8) 100%),
+    repeating-linear-gradient(90deg, transparent 0px, transparent 38px,
+      rgba(255,255,255,0.02) 38px, rgba(255,255,255,0.02) 40px),
+    linear-gradient(180deg, #0d4a2a 0%, #1a6640 60%, #061a10 100%);
+}
+
+.heroInner { max-width: 640px; margin: 0 auto; }
+
+.heroTitle {
+  font-family:  var(--font-display);
+  font-size:    clamp(40px, 5vw, 64px);
+  font-weight:  300;
+  color:        var(--white);
+  line-height:  var(--leading-tight);
+  margin-bottom: var(--space-5);
+}
+.heroTitle em { font-style: italic; color: var(--gold); }
+
+.heroSub {
+  font-family:  var(--font-body);
+  font-size:    var(--text-md);
+  font-style:   italic;
+  color:        var(--gray-400);
+  line-height:  var(--leading-loose);
+  margin-bottom: var(--space-5);
+}
+
+.effectiveDate {
+  font-family:    var(--font-ui);
+  font-size:      9px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color:          var(--gold-dim);
+}
+
+.body {
+  max-width: 900px;
+  margin:    0 auto;
+  padding:   var(--space-16) var(--space-12) var(--space-32);
+  display:   grid;
+  grid-template-columns: 220px 1fr;
+  gap:       var(--space-12);
+  align-items: start;
+}
+
+/* ── TAB NAV ─────────────────────────────────────────────── */
+.tabNav {
+  display:         flex;
+  flex-direction:  column;
+  gap:             var(--space-2);
+  position:        sticky;
+  top:             100px;
+}
+
+.tabBtn {
+  display:         flex;
+  align-items:     center;
+  gap:             var(--space-3);
+  padding:         12px 16px;
+  border-radius:   var(--radius-md);
+  border:          var(--border-subtle);
+  background:      transparent;
+  font-family:     var(--font-ui);
+  font-size:       10px;
+  letter-spacing:  2px;
+  text-transform:  uppercase;
+  color:           var(--gray-400);
+  transition:      all var(--duration-base) var(--ease-out);
+  text-align:      left;
+  border-left:     2px solid transparent;
+}
+.tabBtn:hover {
+  color:        var(--white);
+  border-color: var(--border-dim);
+}
+.tabActive {
+  color:        var(--gold) !important;
+  border-color: var(--gold) !important;
+  background:   rgba(201, 169, 98, 0.06) !important;
+}
+
+/* ── CONTENT ─────────────────────────────────────────────── */
+.content {
+  background:    rgba(255,255,255,0.02);
+  border:        var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding:       var(--space-12);
+}
+
+.docHeader {
+  display:         flex;
+  align-items:     baseline;
+  justify-content: space-between;
+  margin-bottom:   var(--space-6);
+  padding-bottom:  var(--space-6);
+  border-bottom:   var(--border-subtle);
+  flex-wrap:       wrap;
+  gap:             var(--space-3);
+}
+
+.docTitle {
+  font-family:  var(--font-display);
+  font-size:    var(--text-2xl);
+  font-weight:  300;
+  color:        var(--white);
+}
+
+.docDate {
+  font-family:    var(--font-ui);
+  font-size:      9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color:          var(--gray-400);
+}
+
+.disclaimer {
+  background:    rgba(201, 169, 98, 0.06);
+  border:        var(--border-gold);
+  border-radius: var(--radius-md);
+  padding:       var(--space-4) var(--space-6);
+  font-family:   var(--font-ui);
+  font-size:     10px;
+  letter-spacing: 1px;
+  color:         var(--gold-dim);
+  margin-bottom: var(--space-10);
+  line-height:   var(--leading-normal);
+}
+
+.section { margin-bottom: var(--space-10); }
+
+.sectionHeading {
+  font-family:   var(--font-display);
+  font-size:     var(--text-lg);
+  font-weight:   500;
+  color:         var(--gold);
+  margin-bottom: var(--space-3);
+}
+
+.sectionBody {
+  font-family:  var(--font-body);
+  font-size:    var(--text-base);
+  line-height:  var(--leading-loose);
+  color:        var(--gray-500);
+  font-style:   italic;
+}
+
+.contactBox {
+  margin-top:    var(--space-12);
+  padding-top:   var(--space-8);
+  border-top:    var(--border-subtle);
+  text-align:    center;
+}
+
+.contactText {
+  font-family:   var(--font-body);
+  font-size:     var(--text-base);
+  font-style:    italic;
+  color:         var(--gray-400);
+  margin-bottom: var(--space-3);
+}
+
+.contactLink {
+  font-family:    var(--font-ui);
+  font-size:      11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color:          var(--gold);
+  border-bottom:  1px solid rgba(201,169,98,0.3);
+  padding-bottom: 2px;
+  transition:     color var(--duration-base);
+}
+.contactLink:hover { color: var(--gold-light); }
+
+@media (max-width: 768px) {
+  .body  { grid-template-columns: 1fr; padding: var(--space-8) var(--space-6) var(--space-16); }
+  .tabNav { flex-direction: row; flex-wrap: wrap; position: static; }
+  .tabBtn { flex: 1; min-width: 120px; justify-content: center; }
+  .content { padding: var(--space-8); }
+}

@@ -1,0 +1,3 @@
+-- Reserved for local SQL seeds if we decide to use `supabase db reset`.
+-- The first production-style seed path for this project is the Node script:
+-- `npm run supabase:seed:talents`

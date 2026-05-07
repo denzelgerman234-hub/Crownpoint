@@ -1,0 +1,43 @@
+{
+  "name": "crownpoint",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "node server/talentCatalogApi.mjs",
+    "api": "node --env-file=.env.local server/talentCatalogApi.mjs",
+    "build": "vite build",
+    "test": "node scripts/backendSmokeTest.mjs",
+    "test:backend": "node scripts/backendSmokeTest.mjs",
+    "test:backend:workflow": "node --env-file=.env.local scripts/backendWorkflowTest.mjs",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "catalog:talents": "node scripts/generateTalentCatalog.mjs",
+    "supabase:admin:upsert": "node --env-file=.env.local scripts/upsertSupabaseAdmin.mjs",
+    "supabase:db:push": "supabase db push",
+    "supabase:seed:talents": "node --env-file=.env.local scripts/seedSupabaseTalents.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.1",
+    "axios": "^1.14.0",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.7.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "supabase": "^2.97.0",
+    "vite": "^8.0.1"
+  }
+}

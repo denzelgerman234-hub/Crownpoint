@@ -1,0 +1,88 @@
+/* ═══════════════════════════════════════════════════════════
+   CROWNPOINT — RESET & BASE
+   ═══════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  margin:     0;
+  padding:    0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  font-size: 16px;
+}
+
+body {
+  background-color:   var(--green-deep);
+  color:              var(--white);
+  font-family:        var(--font-body);
+  font-size:          var(--text-base);
+  line-height:        var(--leading-normal);
+  overflow-x:         hidden;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── SCROLLBAR ────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--green-deep); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* ── SELECTION ────────────────────────────────────────────── */
+::selection {
+  background: rgba(201, 169, 98, 0.25);
+  color:      var(--white);
+}
+
+/* ── ELEMENTS ─────────────────────────────────────────────── */
+img, video, svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color:           inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor:     pointer;
+  border:     none;
+  background: none;
+  font-family: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size:   inherit;
+  color:       inherit;
+  outline:     none;
+  border:      none;
+  background:  none;
+}
+
+ul, ol { list-style: none; }
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight:  inherit;
+  line-height:  var(--leading-tight);
+}
+
+/* ── FOCUS VISIBLE (accessibility) ───────────────────────── */
+:focus-visible {
+  outline:        2px solid var(--gold);
+  outline-offset: 3px;
+  border-radius:  var(--radius-sm);
+}
+
+/* ── REDUCED MOTION ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:   0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:  0.01ms !important;
+  }
+}
