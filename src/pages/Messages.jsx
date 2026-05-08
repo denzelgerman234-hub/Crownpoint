@@ -24,6 +24,12 @@ const buildThreadLink = (threadId) =>
     backLabel: 'Back to message inbox',
   }).toString()}`
 
+const buildTalentThreadLink = (talentId) =>
+  `/messages/talent/${talentId}?${new URLSearchParams({
+    back: '/messages',
+    backLabel: 'Back to message inbox',
+  }).toString()}`
+
 const buildStarterHelperText = ({
   currentPlan,
   hasSearchIntent,
@@ -144,7 +150,7 @@ export default function Messages() {
                     <p className="cp-text-muted">
                       {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
                         ? 'Choose a talent and open the conversation whenever you are ready.'
-                        : 'Open the talent page to start the conversation or continue an active one.'}
+                        : 'Open the chat thread to start the conversation or continue an active one.'}
                     </p>
                   </div>
 
@@ -175,7 +181,7 @@ export default function Messages() {
                           const activeThread = threadByTalentId.get(Number(talent.id)) ?? null
                           const target = activeThread
                             ? buildThreadLink(activeThread.id)
-                            : `/talent/${talent.id}/messages`
+                            : buildTalentThreadLink(talent.id)
 
                           return (
                             <Link key={talent.id} className="cp-thread-item" to={target}>
@@ -185,7 +191,7 @@ export default function Messages() {
                                 <span>
                                   {activeThread
                                     ? activeThread.preview || 'Resume your active conversation.'
-                                    : 'Open the talent page to send the first message and start the conversation.'}
+                                    : 'Open the chat thread to send the first message and start the conversation.'}
                                 </span>
                               </div>
                               <div className="cp-admin-thread-meta">
@@ -208,7 +214,7 @@ export default function Messages() {
                       to={
                         threadByTalentId.get(Number(singleUnlockedTalent.id))
                           ? buildThreadLink(threadByTalentId.get(Number(singleUnlockedTalent.id)).id)
-                          : `/talent/${singleUnlockedTalent.id}/messages`
+                          : buildTalentThreadLink(singleUnlockedTalent.id)
                       }
                     >
                       <TalentAvatar sizes="48px" talent={singleUnlockedTalent} />
@@ -216,8 +222,8 @@ export default function Messages() {
                         <strong>{singleUnlockedTalent.name}</strong>
                         <span>
                           {threadByTalentId.get(Number(singleUnlockedTalent.id))
-                            ? 'Resume your active conversation from the talent page or your inbox.'
-                            : 'Open the talent page to send the first message and start the conversation.'}
+                            ? 'Resume your active conversation from the chat thread or your inbox.'
+                            : 'Open the chat thread to send the first message and start the conversation.'}
                         </span>
                       </div>
                       <span className="cp-thread-time">

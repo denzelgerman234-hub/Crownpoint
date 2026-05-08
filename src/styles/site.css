@@ -3682,10 +3682,14 @@ select optgroup {
 .cp-thread-page-stack {
   display: grid;
   gap: 18px;
+  width: min(90vw, 1440px);
+  max-width: none;
+  margin: 0 auto;
 }
 
 .cp-chat-card--thread {
-  max-width: 980px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
 }
 

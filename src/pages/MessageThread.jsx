@@ -21,6 +21,18 @@ import { revealUp } from '../utils/motion'
 
 const getSafeBackTarget = (value) => (value && value.startsWith('/') ? value : '/messages')
 
+const getDefaultBackLabel = (backTarget) => {
+  if (backTarget === '/talents') {
+    return 'Back to talents'
+  }
+
+  if (backTarget === '/messages') {
+    return 'Back to message inbox'
+  }
+
+  return 'Back'
+}
+
 export default function MessageThread() {
   const { threadId } = useParams()
   const [searchParams] = useSearchParams()
@@ -54,9 +66,7 @@ export default function MessageThread() {
   const activeThread = visibleThreads.find((thread) => thread.id === threadId) ?? null
   const activeTalent = activeThread ? getTalentSnapshotById(activeThread.talentId) : null
   const backTarget = getSafeBackTarget(searchParams.get('back'))
-  const backLabel = searchParams.get('backLabel') || (
-    backTarget === '/messages' ? 'Back to unlocked threads' : 'Back to direct message'
-  )
+  const backLabel = searchParams.get('backLabel') || getDefaultBackLabel(backTarget)
 
   const getNextMessageId = () => {
     messageIdRef.current += 1

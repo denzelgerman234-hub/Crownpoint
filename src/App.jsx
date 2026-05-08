@@ -21,6 +21,7 @@ const MessageThread = lazy(() => import('./pages/MessageThread'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Payment = lazy(() => import('./pages/Payment'))
 const Pricing = lazy(() => import('./pages/Pricing'))
+const TalentMessageThread = lazy(() => import('./pages/TalentMessageThread'))
 const TalentDirectory = lazy(() => import('./pages/TalentDirectory'))
 const TalentEvents = lazy(() => import('./pages/TalentEvents'))
 const TalentMessaging = lazy(() => import('./pages/TalentMessaging'))
@@ -160,6 +161,17 @@ function App() {
                   </RequireAuth>
                 ),
                 'Loading messages...',
+              )}
+            />
+            <Route
+              path="/messages/talent/:talentId"
+              element={renderPage(
+                (
+                  <RequireAuth>
+                    <TalentMessageThread />
+                  </RequireAuth>
+                ),
+                'Loading direct message thread...',
               )}
             />
             <Route

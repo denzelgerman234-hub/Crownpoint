@@ -11,7 +11,7 @@ const talentSectionPattern = /^\/talent\/[^/]+(?:\/(shop|reviews))?\/?$/
 const talentEventPattern = /^\/talent\/[^/]+\/events\/?$/
 const talentMessagePattern = /^\/talent\/[^/]+\/messages\/?$/
 const experiencesPattern = /^\/(?:experiences|book)\/?$/
-const messagesPattern = /^\/messages(?:\/[^/]+)?\/?$/
+const messagesPattern = /^\/messages(?:\/[^/]+(?:\/[^/]+)?)?\/?$/
 
 const linkClassName = (item, pathname) => ({ isActive }) => {
   const sectionActive = item.match ? item.match(pathname) : false
