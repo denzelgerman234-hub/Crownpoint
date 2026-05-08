@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, MessageSquareText, Sparkles } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
@@ -6,28 +6,28 @@ import TalentDetailLayout from '../components/layout/TalentDetailLayout'
 import PageWrapper from '../components/layout/PageWrapper'
 import Loader from '../components/ui/Loader'
 import MembershipGate from '../components/membership/MembershipGate'
-import MessageAttachmentList from '../components/ui/MessageAttachmentList'
-import MessageComposer from '../components/ui/MessageComposer'
-import TalentAvatar from '../components/ui/TalentAvatar'
 import { useAuth } from '../hooks/useAuth'
 import { useResolvedTalent } from '../hooks/useResolvedTalent'
 import { useToast } from '../hooks/useToast'
 import {
   getUserThreadByTalent,
   refreshMessageThreads,
-  sendFanMessage,
-  startFanConversation,
   subscribeToMessageUpdates,
 } from '../services/messageService'
 import { timeAgo } from '../utils/formatters'
 import { revealUp } from '../utils/motion'
+
+const buildTalentInboxLink = (talentId) =>
+  `/messages/talent/${talentId}?${new URLSearchParams({
+    back: `/talent/${talentId}/messages`,
+    backLabel: 'Back to talent profile',
+  }).toString()}`
 
 export default function TalentMessaging() {
   const { id } = useParams()
   const { canMessage, currentPlanLabel, user } = useAuth()
   const { showToast } = useToast()
   const { isLoading, talent } = useResolvedTalent(id)
-  const messageIdRef = useRef(0)
   const [, setMessagesVersion] = useState(0)
 
   const hasMessagingAccess = Boolean(user && talent && canMessage(talent.id))
@@ -50,40 +50,6 @@ export default function TalentMessaging() {
       setMessagesVersion((current) => current + 1)
     })
   }, [hasMessagingAccess, showToast, talent, user])
-
-  const getNextMessageId = () => {
-    messageIdRef.current += 1
-    return `${activeThread?.id ?? `thread-${user?.id ?? 'fan'}-${talent?.id ?? 'talent'}`}-${messageIdRef.current}`
-  }
-
-  const handleSend = async ({ attachments, text }) => {
-    if (!user || !talent) {
-      throw new Error('Sign in and choose a valid talent before sending a message.')
-    }
-
-    if (activeThread) {
-      await sendFanMessage({
-        threadId: activeThread.id,
-        text,
-        attachments,
-        fanName: user.name,
-        messageId: getNextMessageId(),
-      })
-      showToast(`Message sent to ${talent.name}.`, 'success')
-      return
-    }
-
-    await startFanConversation({
-      attachments,
-      currentPlanLabel,
-      fanName: user.name,
-      messageId: getNextMessageId(),
-      talent,
-      text,
-      user,
-    })
-    showToast(`Conversation started with ${talent.name}.`, 'success')
-  }
 
   if (isLoading) {
     return (
@@ -145,8 +111,8 @@ export default function TalentMessaging() {
               </h3>
               <p className="cp-text-muted">
                 {activeThread
-                  ? 'You already have a live conversation here, and you can continue it any time.'
-                  : 'You can send the first message here whenever you are ready.'}
+                  ? 'Your live conversation is ready, and the full chat box opens on its own thread page.'
+                  : 'Open the dedicated chat thread whenever you are ready to send the first message.'}
               </p>
 
               <div className="cp-inline-trust" style={{ marginTop: 18 }}>
@@ -158,10 +124,15 @@ export default function TalentMessaging() {
                   <Sparkles size={14} />
                   {activeThread ? 'Active conversation' : 'Start on first send'}
                 </span>
+                {lastMessage ? (
+                  <span className="cp-chip">
+                    Updated {timeAgo(lastMessage.createdAt || activeThread?.lastActiveAt)}
+                  </span>
+                ) : null}
               </div>
 
               <div className="cp-card-actions" style={{ marginTop: 18 }}>
-                <Link className="cp-btn cp-btn--ghost" to="/messages">
+                <Link className="cp-btn cp-btn--ghost" to={buildTalentInboxLink(talent.id)}>
                   Open message inbox
                   <ArrowRight size={14} />
                 </Link>
@@ -170,75 +141,14 @@ export default function TalentMessaging() {
 
             <motion.article className="cp-info-card cp-surface" {...revealUp}>
               <span className="cp-eyebrow">Private messaging</span>
-              <h3>Reach out when you are ready.</h3>
+              <h3>The chat box now opens on its own page.</h3>
               <ul className="cp-list">
-                <li>Your messages stay together in one conversation.</li>
-                <li>Come back here any time to keep the conversation going.</li>
-                <li>Your inbox will update as new replies come in.</li>
+                <li>Your messages stay together in one dedicated conversation thread.</li>
+                <li>Use the inbox button above to jump straight into the chat box itself.</li>
+                <li>Come back to this tab any time if you want the profile context first.</li>
               </ul>
             </motion.article>
           </div>
-
-          <motion.section className="cp-chat-card cp-surface cp-surface--accent" {...revealUp}>
-            <div className="cp-chat-header">
-              <div className="cp-chat-title">
-                <TalentAvatar sizes="48px" talent={talent} />
-                <div>
-                  <strong>{talent.name}</strong>
-                  <span>
-                    {activeThread
-                      ? activeThread.topic
-                      : `${currentPlanLabel} access is live for this talent.`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="cp-inline-trust">
-                <span className="cp-chip">
-                  <MessageSquareText size={14} />
-                  {activeThread ? 'Conversation live' : 'No thread yet'}
-                </span>
-                {lastMessage ? (
-                  <span className="cp-chip">
-                    Updated {timeAgo(lastMessage.createdAt || activeThread?.lastActiveAt)}
-                  </span>
-                ) : (
-                  <span className="cp-chip">Appears after first message</span>
-                )}
-              </div>
-            </div>
-
-            {activeThread?.messages.length ? (
-              <div className="cp-chat-feed">
-                {activeThread.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`cp-chat-bubble cp-chat-bubble--${message.senderRole}`}
-                  >
-                    {message.text ? <p>{message.text}</p> : null}
-                    <MessageAttachmentList attachments={message.attachments} />
-                    <span>{message.createdAt ? timeAgo(message.createdAt) : 'now'}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="cp-message-preview">
-                Send the first message here to begin the conversation.
-              </div>
-            )}
-
-            <MessageComposer
-              emptyErrorText="Write a message or attach a file before sending it to this talent."
-              key={activeThread?.id ?? `draft-${talent.id}`}
-              onSubmit={handleSend}
-              placeholder={
-                activeThread
-                  ? `Write to ${talent.name}`
-                  : `Send the first message to ${talent.name}`
-              }
-              submitLabel={activeThread ? 'Send message' : 'Start conversation'}
-            />
-          </motion.section>
         </>
       ) : (
         <>
@@ -268,9 +178,9 @@ export default function TalentMessaging() {
 
             <motion.article className="cp-info-card cp-surface" {...revealUp}>
               <span className="cp-eyebrow">What this tab does</span>
-              <h3>Everything for direct talent messaging now lives in one place.</h3>
+              <h3>This tab now sends you into the dedicated inbox when access is live.</h3>
               <ul className="cp-list">
-                <li>Open the live conversation here when your membership already includes this talent.</li>
+                <li>Open the live conversation from here when your membership already includes this talent.</li>
                 <li>Upgrade from here if you still need access.</li>
                 <li>Keep messaging tied to the same talent profile you are exploring.</li>
               </ul>
