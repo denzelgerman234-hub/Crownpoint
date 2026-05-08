@@ -54,6 +54,8 @@ const MESSAGE_ROLES = {
   TALENT: 'talent',
   SYSTEM: 'system',
 }
+const SUPABASE_PAGE_SIZE = 1000
+const MESSAGE_THREAD_HYDRATION_BATCH_SIZE = 100
 const MEMBERSHIP_PRICE_USD_BY_PLAN = {
   [MEMBERSHIP_PLANS.FREE]: {
     [MEMBERSHIP_BILLING_CYCLES.MONTHLY]: 0,
@@ -497,6 +499,46 @@ const normalizeRiskLevel = (value, fallback = 'low') => {
 const toNumberOrNull = (value) => {
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : null
+}
+
+const chunkArray = (items = [], chunkSize = 1) => {
+  const normalizedChunkSize = Math.max(1, Number(chunkSize) || 1)
+  const chunks = []
+
+  for (let index = 0; index < items.length; index += normalizedChunkSize) {
+    chunks.push(items.slice(index, index + normalizedChunkSize))
+  }
+
+  return chunks
+}
+
+const readAllSupabaseRows = async (
+  createQuery,
+  {
+    pageSize = SUPABASE_PAGE_SIZE,
+    errorMessage = 'Supabase query failed.',
+  } = {},
+) => {
+  const normalizedPageSize = Math.max(1, Number(pageSize) || SUPABASE_PAGE_SIZE)
+  const rows = []
+
+  for (let offset = 0; ; offset += normalizedPageSize) {
+    const { data, error } = await createQuery().range(
+      offset,
+      offset + normalizedPageSize - 1,
+    )
+
+    if (error) {
+      throw createHttpError(502, `${errorMessage}: ${error.message}`)
+    }
+
+    const nextRows = data ?? []
+    rows.push(...nextRows)
+
+    if (nextRows.length < normalizedPageSize) {
+      return rows
+    }
+  }
 }
 
 const getMembershipRiskLevel = (paymentMethod) =>
@@ -1308,18 +1350,29 @@ const readThreadMessagesByThreadIds = async (threadIds = []) => {
     return []
   }
 
-  const { data, error } = await supabaseAdmin
-    .from(THREAD_MESSAGES_TABLE)
-    .select('*')
-    .in('thread_id', normalizedThreadIds)
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true })
+  const messageRows = []
 
-  if (error) {
-    throw createHttpError(502, `Supabase message read failed: ${error.message}`)
+  for (const threadIdBatch of chunkArray(
+    normalizedThreadIds,
+    MESSAGE_THREAD_HYDRATION_BATCH_SIZE,
+  )) {
+    const nextRows = await readAllSupabaseRows(
+      () =>
+        supabaseAdmin
+          .from(THREAD_MESSAGES_TABLE)
+          .select('*')
+          .in('thread_id', threadIdBatch)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true }),
+      {
+        errorMessage: 'Supabase message read failed',
+      },
+    )
+
+    messageRows.push(...nextRows)
   }
 
-  return data ?? []
+  return messageRows
 }
 
 const hydrateMessageThreads = async (threadRows = []) => {
@@ -1414,19 +1467,23 @@ const createMessageThreadForFan = async ({ authUser, profile, talent }) => {
 const listMessageThreadsForAuthUser = async (authUser, { talentId = null } = {}) => {
   ensureSupabaseApiConfigured()
   const normalizedTalentId = toNumberOrNull(talentId)
-  const query = supabaseAdmin
-    .from(MESSAGE_THREADS_TABLE)
-    .select('*')
-    .order('last_active_at', { ascending: false })
+  const buildThreadQuery = () =>
+    supabaseAdmin
+      .from(MESSAGE_THREADS_TABLE)
+      .select('*')
+      .order('last_active_at', { ascending: false })
+      .order('id', { ascending: false })
 
   if (isSupabaseAdminUser(authUser)) {
-    const { data, error } = normalizedTalentId
-      ? await query.eq('talent_id', normalizedTalentId)
-      : await query
-
-    if (error) {
-      throw createHttpError(502, `Supabase message thread read failed: ${error.message}`)
-    }
+    const data = await readAllSupabaseRows(
+      () =>
+        normalizedTalentId
+          ? buildThreadQuery().eq('talent_id', normalizedTalentId)
+          : buildThreadQuery(),
+      {
+        errorMessage: 'Supabase message thread read failed',
+      },
+    )
 
     return (await hydrateMessageThreads(data ?? [])).filter((thread) =>
       threadHasFanConversation(thread),
@@ -1439,15 +1496,16 @@ const listMessageThreadsForAuthUser = async (authUser, { talentId = null } = {})
     return []
   }
 
-  let scopedQuery = query.eq('fan_auth_user_id', trimText(authUser.id))
   const visibleTalentIds = normalizedTalentId ? [normalizedTalentId] : accessibleTalentIds
-  scopedQuery = scopedQuery.in('talent_id', visibleTalentIds)
-
-  const { data, error } = await scopedQuery
-
-  if (error) {
-    throw createHttpError(502, `Supabase message thread read failed: ${error.message}`)
-  }
+  const data = await readAllSupabaseRows(
+    () =>
+      buildThreadQuery()
+        .eq('fan_auth_user_id', trimText(authUser.id))
+        .in('talent_id', visibleTalentIds),
+    {
+      errorMessage: 'Supabase message thread read failed',
+    },
+  )
 
   return (await hydrateMessageThreads(data ?? [])).filter((thread) =>
     threadHasFanConversation(thread),

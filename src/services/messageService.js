@@ -437,12 +437,22 @@ let threadsCache = sortThreadsByActivity(readMessageThreads())
 let messageUpdateSubscriberCount = 0
 let messageAutoRefreshIntervalId = null
 let messageAutoRefreshPromise = null
+let messageCacheWriteVersion = 0
+let messageRefreshRequestSequence = 0
+let lastAppliedMessageRefreshSequence = 0
 
-const syncThreadsCache = (threads, { emit = false, persist = true } = {}) => {
+const syncThreadsCache = (
+  threads,
+  { emit = false, persist = true, markMutation = false } = {},
+) => {
   const nextThreads = normalizeThreadsCollection(threads)
   const threadsChanged = serializeThreads(threadsCache) !== serializeThreads(nextThreads)
 
   threadsCache = nextThreads
+
+  if (threadsChanged && markMutation) {
+    messageCacheWriteVersion += 1
+  }
 
   if (persist && MESSAGE_LOCAL_FALLBACKS_ENABLED && threadsChanged) {
     writeMessageThreadsSilently(threadsCache)
@@ -453,6 +463,45 @@ const syncThreadsCache = (threads, { emit = false, persist = true } = {}) => {
   }
 
   return threadsCache
+}
+
+const mergeScopedThreadsIntoCache = (threads, talentId) => {
+  const normalizedTalentId = Number(talentId ?? 0) || null
+
+  if (!normalizedTalentId) {
+    return syncThreadsCache(threads, { emit: true })
+  }
+
+  const nextScopedThreads = normalizeThreadsCollection(threads).filter(
+    (thread) => Number(thread.talentId) === normalizedTalentId,
+  )
+
+  return syncThreadsCache(
+    [
+      ...nextScopedThreads,
+      ...threadsCache.filter((thread) => Number(thread.talentId) !== normalizedTalentId),
+    ],
+    { emit: true },
+  )
+}
+
+const applyRefreshedThreads = (
+  threads,
+  { requestSequence = 0, requestWriteVersion = messageCacheWriteVersion, talentId = null } = {},
+) => {
+  if (requestWriteVersion !== messageCacheWriteVersion) {
+    return getMessageThreads()
+  }
+
+  if (requestSequence < lastAppliedMessageRefreshSequence) {
+    return getMessageThreads()
+  }
+
+  lastAppliedMessageRefreshSequence = requestSequence
+
+  return talentId
+    ? mergeScopedThreadsIntoCache(threads, talentId)
+    : syncThreadsCache(threads, { emit: true })
 }
 
 const handleMessageAutoRefreshVisibilityChange = () => {
@@ -557,7 +606,7 @@ const mergeThreadIntoCache = (thread) => {
       normalizedThread,
       ...threadsCache.filter((candidate) => candidate.id !== normalizedThread.id),
     ],
-    { emit: true },
+    { emit: true, markMutation: true },
   )
 }
 
@@ -587,7 +636,7 @@ const appendMessageToThreadLocally = async (threadId, messageBuilder) => {
   }
 
   writeMessageThreads(nextThreads)
-  threadsCache = sortThreadsByActivity(nextThreads)
+  syncThreadsCache(nextThreads, { markMutation: true })
   return updatedThread
 }
 
@@ -600,11 +649,19 @@ export const refreshMessageThreads = async ({ talentId = null } = {}) => {
     return getMessageThreads()
   }
 
+  const requestSequence = messageRefreshRequestSequence + 1
+  messageRefreshRequestSequence = requestSequence
+  const requestWriteVersion = messageCacheWriteVersion
+
   try {
     const response = await api.get('/message-threads', {
       params: talentId ? { talentId } : undefined,
     })
-    return syncThreadsCache(response.data, { emit: true })
+    return applyRefreshedThreads(response.data, {
+      requestSequence,
+      requestWriteVersion,
+      talentId,
+    })
   } catch (error) {
     if (!MESSAGE_LOCAL_FALLBACKS_ENABLED) {
       throw new Error(readUserSafeApiErrorMessage(error, BACKEND_REQUIRED_MESSAGE))
@@ -627,7 +684,7 @@ export const subscribeToMessageUpdates = (listener) => {
   const handleUpdate = () => listener(getMessageThreads())
   const handleStorage = (event) => {
     if (event.key === MESSAGE_THREADS_KEY) {
-      threadsCache = sortThreadsByActivity(readMessageThreads())
+      syncThreadsCache(readMessageThreads())
       listener(getMessageThreads())
     }
   }
@@ -696,7 +753,7 @@ export const getUserThreads = (user, accessibleTalents = [], currentPlanLabel = 
 
   if (hasChanges) {
     writeMessageThreads(nextThreads)
-    threadsCache = sortThreadsByActivity(nextThreads)
+    syncThreadsCache(nextThreads, { markMutation: true })
   }
 
   return sortThreadsByActivity(
@@ -820,7 +877,7 @@ const createLocalFanConversation = async ({
   ]
 
   writeMessageThreads(nextThreads)
-  threadsCache = sortThreadsByActivity(nextThreads)
+  syncThreadsCache(nextThreads, { markMutation: true })
   return updatedThread
 }
 
@@ -1007,7 +1064,7 @@ export const removeUserThreads = async (userId) => {
     if (MESSAGE_LOCAL_FALLBACKS_ENABLED) {
       writeMessageThreads(nextThreads)
     }
-    threadsCache = sortThreadsByActivity(nextThreads)
+    syncThreadsCache(nextThreads, { markMutation: true })
   }
 
   return deletedThreads.length
