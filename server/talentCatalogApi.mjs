@@ -1191,14 +1191,14 @@ const formatAttachmentPreview = (attachments = []) => {
   return previewParts.length > 0 ? `Sent ${previewParts.join(', ')}` : 'Attachment sent'
 }
 
-const buildMessagePreview = (message = {}) => {
-  const textPreview = trimText(message.text)
+const buildMessagePreview = (message = null) => {
+  const textPreview = trimText(message?.text)
 
   if (textPreview) {
     return textPreview
   }
 
-  return Array.isArray(message.attachments) && message.attachments.length > 0
+  return Array.isArray(message?.attachments) && message.attachments.length > 0
     ? formatAttachmentPreview(message.attachments)
     : ''
 }

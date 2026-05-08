@@ -132,66 +132,19 @@ export default function Messages() {
         <div className="cp-container">
           {hasMessagingAccess ? (
             <>
-              <motion.section className="cp-thread-list cp-thread-list--page cp-surface" {...revealUp}>
-                <div className="cp-thread-list-head">
-                  <div>
-                    <span className="cp-eyebrow">Active conversations</span>
-                    <h2>Only live chats stay in this inbox.</h2>
-                    <p className="cp-text-muted">
-                      Your inbox stays focused now: no background threads, no roster-wide clutter,
-                      just conversations that already have a real fan message in them.
-                    </p>
-                  </div>
-
-                  <span className="cp-chip">
-                    <MessageSquareText size={14} />
-                    {visibleThreads.length} active conversation{visibleThreads.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-
-                {visibleThreads.length ? (
-                  <div className="cp-thread-stack">
-                    {visibleThreads.map((thread) => (
-                      <Link
-                        key={thread.id}
-                        className="cp-thread-item"
-                        to={buildThreadLink(thread.id)}
-                      >
-                        <TalentAvatar
-                          sizes="48px"
-                          talent={{ name: thread.talentName, initials: thread.talentName.charAt(0) }}
-                        />
-                        <div className="cp-thread-copy">
-                          <strong>{thread.talentName}</strong>
-                          <span>{thread.preview || 'Open the latest conversation.'}</span>
-                        </div>
-                        <span className="cp-thread-time">
-                          {thread.lastActiveAt ? timeAgo(thread.lastActiveAt) : 'now'}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="cp-message-preview">
-                    No active conversations yet. Start one from the talent page or the starter flow
-                    below and it will appear here automatically.
-                  </div>
-                )}
-              </motion.section>
-
               <motion.section className="cp-info-card cp-surface" {...revealUp}>
                 <div className="cp-thread-list-head">
                   <div>
                     <span className="cp-eyebrow">Start or resume</span>
                     <h2>
                       {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
-                        ? 'Search unlocked talents before opening a new conversation.'
+                        ? 'Search for the talent you want to message.'
                         : 'Your unlocked talent is ready when you want to reach out.'}
                     </h2>
                     <p className="cp-text-muted">
                       {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
-                        ? 'This keeps Crown Access scalable, fast, and closer to how major platforms handle inboxes.'
-                        : 'Opening the talent page lets you start the conversation when you are ready.'}
+                        ? 'Choose a talent and open the conversation whenever you are ready.'
+                        : 'Open the talent page to start the conversation or continue an active one.'}
                     </p>
                   </div>
 
@@ -200,7 +153,6 @@ export default function Messages() {
                       <Sparkles size={14} />
                       {unlockedTalents.length} unlocked talent{unlockedTalents.length === 1 ? '' : 's'}
                     </span>
-                    <span className="cp-chip">Search-first flow</span>
                   </div>
                 </div>
 
@@ -276,6 +228,52 @@ export default function Messages() {
                     </Link>
                   </div>
                 ) : null}
+              </motion.section>
+
+              <motion.section className="cp-thread-list cp-thread-list--page cp-surface" {...revealUp}>
+                <div className="cp-thread-list-head">
+                  <div>
+                    <span className="cp-eyebrow">Active conversations</span>
+                    <h2>Your current messages.</h2>
+                    <p className="cp-text-muted">
+                      Open any conversation below to continue where you left off.
+                    </p>
+                  </div>
+
+                  <span className="cp-chip">
+                    <MessageSquareText size={14} />
+                    {visibleThreads.length} active conversation{visibleThreads.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {visibleThreads.length ? (
+                  <div className="cp-thread-stack">
+                    {visibleThreads.map((thread) => (
+                      <Link
+                        key={thread.id}
+                        className="cp-thread-item"
+                        to={buildThreadLink(thread.id)}
+                      >
+                        <TalentAvatar
+                          sizes="48px"
+                          talent={{ name: thread.talentName, initials: thread.talentName.charAt(0) }}
+                        />
+                        <div className="cp-thread-copy">
+                          <strong>{thread.talentName}</strong>
+                          <span>{thread.preview || 'Open the latest conversation.'}</span>
+                        </div>
+                        <span className="cp-thread-time">
+                          {thread.lastActiveAt ? timeAgo(thread.lastActiveAt) : 'now'}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="cp-message-preview">
+                    No active conversations yet. When you send your first message, it will appear
+                    here automatically.
+                  </div>
+                )}
               </motion.section>
             </>
           ) : (

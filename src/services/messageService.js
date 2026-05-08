@@ -23,6 +23,7 @@ const MESSAGE_API_START_HINT =
 const MESSAGE_BACKEND_ENABLED = SUPABASE_AUTH_ENABLED
 const MESSAGE_LOCAL_FALLBACKS_ENABLED = LOCAL_BACKEND_FALLBACKS_ENABLED
 const MESSAGE_REFRESH_INTERVAL_MS = 5000
+const MESSAGE_DETAILED_ERRORS_ENABLED = Boolean(import.meta.env.DEV)
 
 const MESSAGE_ROLES = {
   FAN: 'fan',
@@ -63,7 +64,7 @@ let hasWarnedBackgroundMessageRefreshFailure = false
 
 const trimText = (value) => String(value ?? '').trim()
 
-const readApiErrorMessage = (error, fallbackMessage) => {
+const readApiDiagnosticMessage = (error, fallbackMessage) => {
   const responseMessage = String(error?.response?.data?.message ?? '').trim()
   const errorMessage = String(error?.message ?? '').trim()
 
@@ -78,6 +79,11 @@ const readApiErrorMessage = (error, fallbackMessage) => {
   return errorMessage || fallbackMessage
 }
 
+const readUserSafeApiErrorMessage = (error, fallbackMessage) =>
+  MESSAGE_DETAILED_ERRORS_ENABLED
+    ? readApiDiagnosticMessage(error, fallbackMessage)
+    : fallbackMessage
+
 const warnMessageBackendUnavailable = (error) => {
   if (hasWarnedMessageBackendUnavailable) {
     return
@@ -85,7 +91,7 @@ const warnMessageBackendUnavailable = (error) => {
 
   hasWarnedMessageBackendUnavailable = true
   console.warn(
-    `Falling back to the cached message view because the backend API is unavailable. ${readApiErrorMessage(error, MESSAGE_API_START_HINT)}`,
+    `Falling back to the cached message view because the backend API is unavailable. ${readApiDiagnosticMessage(error, MESSAGE_API_START_HINT)}`,
   )
 }
 
@@ -96,7 +102,7 @@ const warnBackgroundMessageRefreshFailure = (error) => {
 
   hasWarnedBackgroundMessageRefreshFailure = true
   console.warn(
-    `Live message refresh hit a problem. ${readApiErrorMessage(error, 'We could not refresh messages right now.')}`,
+    `Live message refresh hit a problem. ${readApiDiagnosticMessage(error, 'We could not refresh messages right now.')}`,
   )
 }
 
@@ -601,7 +607,7 @@ export const refreshMessageThreads = async ({ talentId = null } = {}) => {
     return syncThreadsCache(response.data, { emit: true })
   } catch (error) {
     if (!MESSAGE_LOCAL_FALLBACKS_ENABLED) {
-      throw new Error(readApiErrorMessage(error, BACKEND_REQUIRED_MESSAGE))
+      throw new Error(readUserSafeApiErrorMessage(error, BACKEND_REQUIRED_MESSAGE))
     }
 
     if (error?.response?.status && Number(error.response.status) < 500) {
@@ -766,7 +772,7 @@ const sendMessageThroughBackend = async ({
     }
 
     throw new Error(
-      readApiErrorMessage(error, 'We could not send that message right now.'),
+      readUserSafeApiErrorMessage(error, 'We could not send that message right now.'),
     )
   }
 }
@@ -851,7 +857,7 @@ export const startFanConversation = async ({
       }
 
       throw new Error(
-        readApiErrorMessage(error, 'We could not start that conversation right now.'),
+        readUserSafeApiErrorMessage(error, 'We could not start that conversation right now.'),
       )
     }
   }

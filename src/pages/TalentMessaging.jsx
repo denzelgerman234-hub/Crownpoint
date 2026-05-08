@@ -145,8 +145,8 @@ export default function TalentMessaging() {
               </h3>
               <p className="cp-text-muted">
                 {activeThread
-                  ? 'You already have a live conversation here. New messages will keep this thread in your inbox and the admin desk.'
-                  : 'Search-first messaging is active now. Your inbox stays clean until you send the first message.'}
+                  ? 'You already have a live conversation here, and you can continue it any time.'
+                  : 'You can send the first message here whenever you are ready.'}
               </p>
 
               <div className="cp-inline-trust" style={{ marginTop: 18 }}>
@@ -169,12 +169,12 @@ export default function TalentMessaging() {
             </motion.article>
 
             <motion.article className="cp-info-card cp-surface" {...revealUp}>
-              <span className="cp-eyebrow">How it works</span>
-              <h3>Unlocked access no longer creates background chats.</h3>
+              <span className="cp-eyebrow">Private messaging</span>
+              <h3>Reach out when you are ready.</h3>
               <ul className="cp-list">
-                <li>Your inbox only shows conversations you actually start.</li>
-                <li>The admin desk only sees this talent thread after your first message lands.</li>
-                <li>Once the chat is active, new replies keep updating here and in your inbox.</li>
+                <li>Your messages stay together in one conversation.</li>
+                <li>Come back here any time to keep the conversation going.</li>
+                <li>Your inbox will update as new replies come in.</li>
               </ul>
             </motion.article>
           </div>
@@ -223,8 +223,7 @@ export default function TalentMessaging() {
               </div>
             ) : (
               <div className="cp-message-preview">
-                Send the first message here. This conversation will only appear in your main inbox
-                and the admin desk after you start it.
+                Send the first message here to begin the conversation.
               </div>
             )}
 
