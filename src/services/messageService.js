@@ -104,6 +104,10 @@ const createIsoFromOffset = (minutesAgo) =>
   new Date(Date.now() - minutesAgo * 60 * 1000).toISOString()
 
 const buildThreadId = (fanUserId, talentId) => `thread-${fanUserId}-${talentId}`
+const buildLegacyInboxReadyText = (talentName = 'Talent') =>
+  `${String(talentName || 'Talent').trim() || 'Talent'}'s private inbox is now open.`
+const LEGACY_WELCOME_REPLY_TEXT =
+  'Thanks for reaching out. Send a note whenever you are ready.'
 
 const resolveMessageRole = (message = {}) => {
   const candidate = String(message.senderRole ?? message.sender ?? MESSAGE_ROLES.SYSTEM)
@@ -116,6 +120,22 @@ const resolveMessageRole = (message = {}) => {
 
   return MESSAGE_ROLES.SYSTEM
 }
+
+const isLegacyWelcomeMessage = (message = {}, threadContext = defaultThread) => {
+  const senderRole = resolveMessageRole(message)
+  const messageText = String(message?.text ?? '').trim()
+  const talentName = String(threadContext?.talentName ?? '').trim() || 'Talent'
+
+  return (
+    (senderRole === MESSAGE_ROLES.SYSTEM &&
+      messageText === buildLegacyInboxReadyText(talentName)) ||
+    (senderRole === MESSAGE_ROLES.TALENT && messageText === LEGACY_WELCOME_REPLY_TEXT)
+  )
+}
+
+const threadHasFanConversation = (thread = {}) =>
+  Array.isArray(thread?.messages) &&
+  thread.messages.some((message) => resolveMessageRole(message) === MESSAGE_ROLES.FAN)
 
 const buildSenderLabel = (messageRole, thread = {}, message = {}) => {
   if (message?.senderLabel) {
@@ -185,7 +205,9 @@ const buildMessagePreview = (message = {}) => {
     return textPreview
   }
 
-  return formatAttachmentPreview(message?.attachments)
+  return Array.isArray(message?.attachments) && message.attachments.length > 0
+    ? formatAttachmentPreview(message.attachments)
+    : ''
 }
 
 const normalizeMessageAttachments = (attachments = []) =>
@@ -232,11 +254,17 @@ const normalizeThreadRecord = (thread = {}) => {
   }
 
   const normalizedMessages = Array.isArray(thread?.messages)
-    ? thread.messages.map((message) => normalizeMessageRecord(message, baseThread))
+    ? thread.messages
+        .filter((message) => !isLegacyWelcomeMessage(message, baseThread))
+        .map((message) => normalizeMessageRecord(message, baseThread))
     : []
   const lastMessage = normalizedMessages[normalizedMessages.length - 1] ?? null
   const lastActiveAt = thread?.lastActiveAt ?? lastMessage?.createdAt ?? thread?.createdAt ?? null
-  const preview = String(thread?.preview ?? '').trim() || buildMessagePreview(lastMessage)
+  const storedPreview = String(thread?.preview ?? '').trim()
+  const preview =
+    storedPreview && storedPreview !== `${baseThread.talentName}'s private inbox is ready for your first message.`
+      ? storedPreview
+      : buildMessagePreview(lastMessage)
 
   return {
     ...baseThread,
@@ -355,7 +383,7 @@ const normalizeThreadsCollection = (threads) =>
 
 const serializeThreads = (threads) => JSON.stringify(threads)
 
-const buildInitialMembershipThread = ({ user, talent, currentPlanLabel }) => {
+const buildEmptyConversationThread = ({ user, talent, currentPlanLabel }) => {
   const createdAt = new Date().toISOString()
   const threadId = buildThreadId(user.id, talent.id)
 
@@ -367,25 +395,10 @@ const buildInitialMembershipThread = ({ user, talent, currentPlanLabel }) => {
     talentId: talent.id,
     talentName: talent.name,
     topic: `${currentPlanLabel} inbox`,
-    preview: `${talent.name}'s private inbox is ready for your first message.`,
+    preview: '',
     createdAt,
-    lastActiveAt: createdAt,
-    messages: [
-      {
-        id: `${threadId}-system`,
-        senderRole: MESSAGE_ROLES.SYSTEM,
-        senderLabel: 'System',
-        text: `${talent.name}'s private inbox is now open.`,
-        createdAt,
-      },
-      {
-        id: `${threadId}-welcome`,
-        senderRole: MESSAGE_ROLES.TALENT,
-        senderLabel: talent.name,
-        text: 'Thanks for reaching out. Send a note whenever you are ready.',
-        createdAt,
-      },
-    ],
+    lastActiveAt: null,
+    messages: [],
   })
 }
 
@@ -650,7 +663,8 @@ export const getUserThreads = (user, accessibleTalents = [], currentPlanLabel = 
       getMessageThreads().filter(
         (thread) =>
           thread.fanUserId === Number(user.id) &&
-          accessibleTalentIds.includes(Number(thread.talentId)),
+          accessibleTalentIds.includes(Number(thread.talentId)) &&
+          threadHasFanConversation(thread),
       ),
     )
   }
@@ -674,23 +688,6 @@ export const getUserThreads = (user, accessibleTalents = [], currentPlanLabel = 
     hasChanges = hasChanges || changed
   })
 
-  accessibleTalents.forEach((talent) => {
-    const existingThreadId = buildThreadId(user.id, talent.id)
-
-    if (nextThreads.some((thread) => thread.id === existingThreadId)) {
-      return
-    }
-
-    nextThreads.push(
-      buildInitialMembershipThread({
-        user,
-        talent,
-        currentPlanLabel,
-      }),
-    )
-    hasChanges = true
-  })
-
   if (hasChanges) {
     writeMessageThreads(nextThreads)
     threadsCache = sortThreadsByActivity(nextThreads)
@@ -700,7 +697,8 @@ export const getUserThreads = (user, accessibleTalents = [], currentPlanLabel = 
     nextThreads.filter(
       (thread) =>
         thread.fanUserId === Number(user.id) &&
-        accessibleTalentIds.includes(Number(thread.talentId)),
+        accessibleTalentIds.includes(Number(thread.talentId)) &&
+        threadHasFanConversation(thread),
     ),
   )
 }
@@ -773,6 +771,106 @@ const sendMessageThroughBackend = async ({
   }
 }
 
+const createLocalFanConversation = async ({
+  attachments = [],
+  currentPlanLabel = 'Private',
+  fanName = 'Fan',
+  messageId,
+  talent,
+  text,
+  user,
+}) => {
+  const threadId = buildThreadId(user.id, talent.id)
+  const storedThreads = readMessageThreads()
+  const currentThread =
+    storedThreads.find((thread) => thread.id === threadId) ??
+    buildEmptyConversationThread({
+      user,
+      talent,
+      currentPlanLabel,
+    })
+  const nextMessage = normalizeMessageRecord(
+    {
+      id: messageId || `${threadId}-fan-${Date.now()}`,
+      senderRole: MESSAGE_ROLES.FAN,
+      senderLabel: fanName,
+      text,
+      attachments: await prepareMessageAttachments(attachments, {
+        threadStorageKey: threadId,
+      }),
+      createdAt: new Date().toISOString(),
+    },
+    currentThread,
+  )
+  const updatedThread = normalizeThreadRecord({
+    ...currentThread,
+    preview: buildMessagePreview(nextMessage),
+    lastActiveAt: nextMessage.createdAt,
+    messages: [...currentThread.messages, nextMessage],
+  })
+  const nextThreads = [
+    updatedThread,
+    ...storedThreads.filter((thread) => thread.id !== updatedThread.id),
+  ]
+
+  writeMessageThreads(nextThreads)
+  threadsCache = sortThreadsByActivity(nextThreads)
+  return updatedThread
+}
+
+export const startFanConversation = async ({
+  attachments = [],
+  currentPlanLabel = 'Private',
+  fanName = 'Fan',
+  messageId,
+  talent,
+  text,
+  user,
+}) => {
+  if (!user || !talent) {
+    throw new Error('Choose a valid talent before starting a conversation.')
+  }
+
+  if (MESSAGE_BACKEND_ENABLED) {
+    const threadStorageKey = buildThreadId(user.id, talent.id)
+    const preparedAttachments = await prepareMessageAttachments(attachments, {
+      threadStorageKey,
+    })
+
+    try {
+      const response = await api.post('/message-threads', {
+        attachments: preparedAttachments,
+        talentId: Number(talent.id),
+        text: trimText(text),
+      })
+      mergeThreadIntoCache(response.data)
+      return normalizeThreadRecord(response.data)
+    } catch (error) {
+      if (preparedAttachments.length) {
+        await deleteMessageAttachments(preparedAttachments).catch(() => {})
+      }
+
+      throw new Error(
+        readApiErrorMessage(error, 'We could not start that conversation right now.'),
+      )
+    }
+  }
+
+  if (!MESSAGE_LOCAL_FALLBACKS_ENABLED) {
+    throw new Error(BACKEND_REQUIRED_MESSAGE)
+  }
+
+  return createLocalFanConversation({
+    attachments,
+    currentPlanLabel,
+    fanName,
+    messageId,
+    talent,
+    text,
+    user,
+  })
+}
+
 export const sendFanMessage = async ({
   threadId,
   text,
@@ -837,15 +935,16 @@ export const sendTalentMessage = async ({
 
 export const getTalentThreads = (talentId) =>
   sortThreadsByActivity(
-    getMessageThreads().filter((thread) => Number(thread.talentId) === Number(talentId)),
+    getMessageThreads().filter(
+      (thread) =>
+        Number(thread.talentId) === Number(talentId) && threadHasFanConversation(thread),
+    ),
   )
 
 export const getTalentInboxSummaries = () => {
-  const threads = getMessageThreads()
-
   return getTalentRosterSnapshot()
     .map((talent) => {
-      const talentThreads = threads.filter((thread) => thread.talentId === talent.id)
+      const talentThreads = getTalentThreads(talent.id)
       const latestThread = talentThreads[0] ?? null
       const needsReplyCount = talentThreads.filter((thread) => {
         const lastMessage = thread.messages[thread.messages.length - 1]

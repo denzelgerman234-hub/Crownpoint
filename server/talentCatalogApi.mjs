@@ -1193,7 +1193,14 @@ const formatAttachmentPreview = (attachments = []) => {
 
 const buildMessagePreview = (message = {}) => {
   const textPreview = trimText(message.text)
-  return textPreview || formatAttachmentPreview(message.attachments)
+
+  if (textPreview) {
+    return textPreview
+  }
+
+  return Array.isArray(message.attachments) && message.attachments.length > 0
+    ? formatAttachmentPreview(message.attachments)
+    : ''
 }
 
 const toThreadRouteId = (threadRecordId) => `thread-${Number(threadRecordId) || 0}`
@@ -1249,9 +1256,28 @@ const fromThreadMessageRow = (record = {}) => ({
   createdAt: record.created_at ?? null,
 })
 
+const isLegacyWelcomeMessageRow = (record = {}, thread = {}) => {
+  const senderRole = normalizeMessageRole(record.sender_role ?? record.senderRole)
+  const messageText = trimText(record.message_text ?? record.text)
+  const talentName = trimText(thread.talent_name ?? thread.talentName) || 'Talent'
+
+  return (
+    (senderRole === MESSAGE_ROLES.SYSTEM &&
+      messageText === `${talentName}'s private inbox is now open.`) ||
+    (senderRole === MESSAGE_ROLES.TALENT &&
+      messageText === 'Thanks for reaching out. Send a note whenever you are ready.')
+  )
+}
+
+const threadHasFanConversation = (thread = {}) =>
+  Array.isArray(thread.messages) &&
+  thread.messages.some((message) => normalizeMessageRole(message.senderRole) === MESSAGE_ROLES.FAN)
+
 const fromMessageThreadRow = (record = {}, messages = []) => {
   const normalizedMessages = Array.isArray(messages) ? messages : []
   const lastMessage = normalizedMessages[normalizedMessages.length - 1] ?? null
+  const talentName = trimText(record.talent_name)
+  const storedPreview = trimText(record.preview)
 
   return {
     id: toThreadRouteId(record.id),
@@ -1261,37 +1287,16 @@ const fromMessageThreadRow = (record = {}, messages = []) => {
     fanName: trimText(record.fan_name) || 'Member',
     fanEmail: trimText(record.fan_email).toLowerCase(),
     talentId: toNumberOrNull(record.talent_id),
-    talentName: trimText(record.talent_name),
+    talentName,
     topic: trimText(record.topic) || 'Private inbox',
-    preview: trimText(record.preview) || buildMessagePreview(lastMessage),
+    preview:
+      storedPreview && storedPreview !== `${talentName}'s private inbox is ready for your first message.`
+        ? storedPreview
+        : buildMessagePreview(lastMessage),
     createdAt: record.created_at ?? null,
     lastActiveAt: record.last_active_at ?? lastMessage?.createdAt ?? record.created_at ?? null,
     messages: normalizedMessages,
   }
-}
-
-const buildWelcomeMessagesForThread = (thread = {}) => {
-  const createdAt = new Date().toISOString()
-  const talentName = trimText(thread.talent_name) || 'Talent'
-
-  return [
-    {
-      thread_id: Number(thread.id) || 0,
-      sender_role: MESSAGE_ROLES.SYSTEM,
-      sender_label: 'System',
-      message_text: `${talentName}'s private inbox is now open.`,
-      attachments: [],
-      created_at: createdAt,
-    },
-    {
-      thread_id: Number(thread.id) || 0,
-      sender_role: MESSAGE_ROLES.TALENT,
-      sender_label: talentName,
-      message_text: 'Thanks for reaching out. Send a note whenever you are ready.',
-      attachments: [],
-      created_at: createdAt,
-    },
-  ]
 }
 
 const readThreadMessagesByThreadIds = async (threadIds = []) => {
@@ -1326,45 +1331,56 @@ const hydrateMessageThreads = async (threadRows = []) => {
   messages.forEach((messageRow) => {
     const threadId = Number(messageRow.thread_id) || 0
     const nextThreadMessages = messagesByThreadId.get(threadId) ?? []
-    nextThreadMessages.push(fromThreadMessageRow(messageRow))
+    nextThreadMessages.push(messageRow)
     messagesByThreadId.set(threadId, nextThreadMessages)
   })
 
-  return threadRows.map((threadRow) =>
-    fromMessageThreadRow(
-      threadRow,
-      messagesByThreadId.get(Number(threadRow.id) || 0) ?? [],
-    ),
-  )
+  return threadRows.map((threadRow) => {
+    const nextMessages = (messagesByThreadId.get(Number(threadRow.id) || 0) ?? [])
+      .filter((messageRow) => !isLegacyWelcomeMessageRow(messageRow, threadRow))
+      .map((messageRow) => fromThreadMessageRow(messageRow))
+
+    return fromMessageThreadRow(threadRow, nextMessages)
+  })
 }
 
-const ensureMessageThreadsForAuthUser = async (authUser) => {
+const getMessageAccessContextForAuthUser = async (authUser) => {
   ensureSupabaseApiConfigured()
   const profile = await requireUserProfileByAuthUserId(authUser.id)
   const allTalents = await listTalents()
   const accessibleTalentIds = getMessageAccessTalentIds(profile, allTalents)
 
-  if (!accessibleTalentIds.length) {
-    return {
-      accessibleTalentIds,
-      profile,
-    }
+  return {
+    accessibleTalentIds,
+    allTalents,
+    profile,
+  }
+}
+
+const readMessageThreadRowForFanTalent = async (authUserId, talentId) => {
+  const normalizedTalentId = toNumberOrNull(talentId)
+
+  if (!normalizedTalentId) {
+    return null
   }
 
-  const { data: existingThreadRows, error: existingThreadRowsError } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from(MESSAGE_THREADS_TABLE)
-    .select('id, talent_id')
-    .eq('fan_auth_user_id', trimText(authUser.id))
+    .select('*')
+    .eq('fan_auth_user_id', trimText(authUserId))
+    .eq('talent_id', normalizedTalentId)
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
 
-  if (existingThreadRowsError) {
-    throw createHttpError(502, `Supabase message thread read failed: ${existingThreadRowsError.message}`)
+  if (error) {
+    throw createHttpError(502, `Supabase message thread lookup failed: ${error.message}`)
   }
 
-  const existingTalentIds = new Set(
-    (existingThreadRows ?? [])
-      .map((threadRow) => toNumberOrNull(threadRow.talent_id))
-      .filter(Boolean),
-  )
+  return data ?? null
+}
+
+const createMessageThreadForFan = async ({ authUser, profile, talent }) => {
   const fanName =
     trimText(profile.name) ||
     trimText(authUser.user_metadata?.name) ||
@@ -1372,53 +1388,27 @@ const ensureMessageThreadsForAuthUser = async (authUser) => {
     'Member'
   const fanEmail = trimText(profile.email || authUser.email).toLowerCase()
   const topic = getMembershipInboxTopic(profile.plan)
+  const { data, error } = await supabaseAdmin
+    .from(MESSAGE_THREADS_TABLE)
+    .insert({
+      fan_auth_user_id: trimText(authUser.id),
+      fan_user_public_id: toNumberOrNull(profile.public_id),
+      fan_name: fanName,
+      fan_email: fanEmail,
+      talent_id: Number(talent.id) || 0,
+      talent_name: trimText(talent.name),
+      topic,
+      preview: '',
+      last_active_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single()
 
-  for (const talentId of accessibleTalentIds) {
-    if (existingTalentIds.has(talentId)) {
-      continue
-    }
-
-    const talent = allTalents.find((candidate) => Number(candidate.id) === Number(talentId))
-
-    if (!talent) {
-      continue
-    }
-
-    const preview = `${talent.name}'s private inbox is ready for your first message.`
-    const { data: createdThread, error: createdThreadError } = await supabaseAdmin
-      .from(MESSAGE_THREADS_TABLE)
-      .insert({
-        fan_auth_user_id: trimText(authUser.id),
-        fan_user_public_id: toNumberOrNull(profile.public_id),
-        fan_name: fanName,
-        fan_email: fanEmail,
-        talent_id: Number(talent.id) || 0,
-        talent_name: trimText(talent.name),
-        topic,
-        preview,
-        last_active_at: new Date().toISOString(),
-      })
-      .select('*')
-      .single()
-
-    if (createdThreadError) {
-      throw createHttpError(502, `Supabase message thread create failed: ${createdThreadError.message}`)
-    }
-
-    const welcomeMessages = buildWelcomeMessagesForThread(createdThread)
-    const { error: welcomeMessagesError } = await supabaseAdmin
-      .from(THREAD_MESSAGES_TABLE)
-      .insert(welcomeMessages)
-
-    if (welcomeMessagesError) {
-      throw createHttpError(502, `Supabase welcome message create failed: ${welcomeMessagesError.message}`)
-    }
+  if (error) {
+    throw createHttpError(502, `Supabase message thread create failed: ${error.message}`)
   }
 
-  return {
-    accessibleTalentIds,
-    profile,
-  }
+  return data
 }
 
 const listMessageThreadsForAuthUser = async (authUser, { talentId = null } = {}) => {
@@ -1438,10 +1428,12 @@ const listMessageThreadsForAuthUser = async (authUser, { talentId = null } = {})
       throw createHttpError(502, `Supabase message thread read failed: ${error.message}`)
     }
 
-    return hydrateMessageThreads(data ?? [])
+    return (await hydrateMessageThreads(data ?? [])).filter((thread) =>
+      threadHasFanConversation(thread),
+    )
   }
 
-  const { accessibleTalentIds } = await ensureMessageThreadsForAuthUser(authUser)
+  const { accessibleTalentIds } = await getMessageAccessContextForAuthUser(authUser)
 
   if (!accessibleTalentIds.length) {
     return []
@@ -1457,7 +1449,9 @@ const listMessageThreadsForAuthUser = async (authUser, { talentId = null } = {})
     throw createHttpError(502, `Supabase message thread read failed: ${error.message}`)
   }
 
-  return hydrateMessageThreads(data ?? [])
+  return (await hydrateMessageThreads(data ?? [])).filter((thread) =>
+    threadHasFanConversation(thread),
+  )
 }
 
 const readMessageThreadById = async (threadId) => {
@@ -1521,6 +1515,14 @@ const createMessageInSupabase = async (request, threadId, payload = {}) => {
     throw createHttpError(403, 'That message thread is not available for this account.')
   }
 
+  if (!isAdmin) {
+    const { accessibleTalentIds } = await getMessageAccessContextForAuthUser(authUser)
+
+    if (!accessibleTalentIds.includes(toNumberOrNull(threadRecord.talent_id))) {
+      throw createHttpError(403, 'That message thread is not available for this account.')
+    }
+  }
+
   const text = trimText(payload.text)
   const attachments = normalizeMessageAttachments(payload.attachments)
 
@@ -1568,6 +1570,91 @@ const createMessageInSupabase = async (request, threadId, payload = {}) => {
   }
 
   return readMessageThreadById(normalizedThreadId)
+}
+
+const createMessageThreadInSupabase = async (request, payload = {}) => {
+  ensureSupabaseApiConfigured()
+  const authUser = await requireAuthenticatedUser(
+    request,
+    'Sign in before starting a conversation.',
+  )
+
+  if (isSupabaseAdminUser(authUser)) {
+    throw createHttpError(403, 'Admin accounts can only reply to existing fan conversations.')
+  }
+
+  const normalizedTalentId = toNumberOrNull(payload.talentId)
+
+  if (!normalizedTalentId) {
+    throw createHttpError(400, 'Choose a valid talent before starting a conversation.')
+  }
+
+  const text = trimText(payload.text)
+  const attachments = normalizeMessageAttachments(payload.attachments)
+
+  if (!text && !attachments.length) {
+    throw createHttpError(400, 'Write a message or attach a file before sending it.')
+  }
+
+  const { accessibleTalentIds, allTalents, profile } = await getMessageAccessContextForAuthUser(
+    authUser,
+  )
+
+  if (!accessibleTalentIds.includes(normalizedTalentId)) {
+    throw createHttpError(403, 'Your current membership does not include that talent inbox.')
+  }
+
+  const talent = allTalents.find((candidate) => Number(candidate.id) === normalizedTalentId)
+
+  if (!talent) {
+    throw createHttpError(404, 'That talent could not be found.')
+  }
+
+  let threadRecord = await readMessageThreadRowForFanTalent(authUser.id, normalizedTalentId)
+
+  if (!threadRecord) {
+    threadRecord = await createMessageThreadForFan({
+      authUser,
+      profile,
+      talent,
+    })
+  }
+
+  const createdAt = new Date().toISOString()
+  const fanName =
+    trimText(threadRecord.fan_name) ||
+    trimText(profile.name) ||
+    trimText(authUser.user_metadata?.name) ||
+    trimText(profile.email || authUser.email).split('@')[0] ||
+    'Member'
+  const { error: messageInsertError } = await supabaseAdmin
+    .from(THREAD_MESSAGES_TABLE)
+    .insert({
+      thread_id: Number(threadRecord.id) || 0,
+      sender_role: MESSAGE_ROLES.FAN,
+      sender_label: fanName,
+      message_text: text,
+      attachments,
+      created_at: createdAt,
+    })
+
+  if (messageInsertError) {
+    throw createHttpError(502, `Supabase message create failed: ${messageInsertError.message}`)
+  }
+
+  const { error: threadUpdateError } = await supabaseAdmin
+    .from(MESSAGE_THREADS_TABLE)
+    .update({
+      preview: buildMessagePreview({ text, attachments }),
+      last_active_at: createdAt,
+    })
+    .eq('id', Number(threadRecord.id) || 0)
+
+  if (threadUpdateError) {
+    throw createHttpError(502, `Supabase message thread update failed: ${threadUpdateError.message}`)
+  }
+
+  return readMessageThreadById(Number(threadRecord.id) || 0)
 }
 
 const collectStoredUploads = (uploads = []) =>
@@ -2978,6 +3065,15 @@ export const handleTalentApiRequest = async (request, response) => {
           await listMessageThreadsForAuthUser(authUser, {
             talentId: requestUrl.searchParams.get('talentId'),
           }),
+        )
+        return
+      }
+
+      if (request.method === 'POST') {
+        sendJson(
+          response,
+          201,
+          await createMessageThreadInSupabase(request, await collectJsonBody(request)),
         )
         return
       }

@@ -3,8 +3,10 @@ import { motion } from 'framer-motion'
 import { ArrowRight, MessageSquareText, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PageWrapper from '../components/layout/PageWrapper'
+import TalentSearchFilters from '../components/ui/TalentSearchFilters'
 import TalentAvatar from '../components/ui/TalentAvatar'
 import { useAuth } from '../hooks/useAuth'
+import { useTalentFilters } from '../hooks/useTalentFilters'
 import { useTalentRoster } from '../hooks/useTalentRoster'
 import { useToast } from '../hooks/useToast'
 import {
@@ -12,10 +14,43 @@ import {
   refreshMessageThreads,
   subscribeToMessageUpdates,
 } from '../services/messageService'
-import { getTalentSnapshotById } from '../services/talentService'
 import { MEMBERSHIP_PLANS } from '../utils/constants'
 import { timeAgo } from '../utils/formatters'
 import { revealUp } from '../utils/motion'
+
+const buildThreadLink = (threadId) =>
+  `/messages/${threadId}?${new URLSearchParams({
+    back: '/messages',
+    backLabel: 'Back to message inbox',
+  }).toString()}`
+
+const buildStarterHelperText = ({
+  currentPlan,
+  hasSearchIntent,
+  isQueryTooShort,
+  resultCount,
+  unlockedCount,
+}) => {
+  if (currentPlan !== MEMBERSHIP_PLANS.CROWN_ACCESS) {
+    return unlockedCount
+      ? 'Your unlocked talent is ready whenever you want to start the conversation.'
+      : 'Upgrade your membership to unlock direct talent messaging.'
+  }
+
+  if (!hasSearchIntent) {
+    return 'Search by talent name, category, or location to start or resume a conversation. Unused inboxes stay hidden until you send the first message.'
+  }
+
+  if (isQueryTooShort) {
+    return 'Type at least 2 characters or choose a category to narrow the roster.'
+  }
+
+  if (!resultCount) {
+    return 'No unlocked talent matches that search right now.'
+  }
+
+  return `Showing ${resultCount} unlocked talent${resultCount === 1 ? '' : 's'} that match the current search.`
+}
 
 export default function Messages() {
   const { canMessage, currentPlan, currentPlanLabel, user } = useAuth()
@@ -44,6 +79,36 @@ export default function Messages() {
   }, [hasMessagingAccess, showToast, user])
 
   const visibleThreads = user ? getUserThreads(user, unlockedTalents, currentPlanLabel) : []
+  const threadByTalentId = new Map(
+    visibleThreads.map((thread) => [Number(thread.talentId), thread]),
+  )
+  const singleUnlockedTalent = unlockedTalents[0] ?? null
+  const {
+    activeCategory,
+    clearFilters,
+    filteredTalents,
+    hasSearchIntent,
+    isQueryTooShort,
+    resultCount,
+    searchQuery,
+    setActiveCategory,
+    setSearchQuery,
+  } = useTalentFilters(unlockedTalents, {
+    requireSearch: currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS && unlockedTalents.length > 1,
+    visibleResults: 8,
+    visibleIncrement: 8,
+  })
+  const starterHelperText = useMemo(
+    () =>
+      buildStarterHelperText({
+        currentPlan,
+        hasSearchIntent,
+        isQueryTooShort,
+        resultCount,
+        unlockedCount: unlockedTalents.length,
+      }),
+    [currentPlan, hasSearchIntent, isQueryTooShort, resultCount, unlockedTalents.length],
+  )
 
   return (
     <PageWrapper className="cp-page--messages">
@@ -56,8 +121,8 @@ export default function Messages() {
             </h1>
             <p className="cp-page-intro">
               {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
-                ? 'Crown Access gives you a private inbox for every talent on the roster.'
-                : 'Inner Circle keeps you connected to one chosen talent through a dedicated private inbox.'}
+                ? 'Crown Access lets you start a private conversation with any talent, while only the conversations you actually start appear here.'
+                : 'Inner Circle unlocks a dedicated talent inbox, and the conversation appears here once you send the first message.'}
             </p>
           </motion.div>
         </div>
@@ -65,46 +130,154 @@ export default function Messages() {
 
       <section className="cp-section" style={{ paddingTop: 20 }}>
         <div className="cp-container">
-          {visibleThreads.length > 0 ? (
-            <motion.section className="cp-thread-list cp-thread-list--page cp-surface" {...revealUp}>
-              <div className="cp-thread-list-head">
-                <div>
-                  <span className="cp-eyebrow">Unlocked threads</span>
-                  <h2>Choose the inbox you want to open.</h2>
-                  <p className="cp-text-muted">
-                    Each conversation opens on its own page now, so you can jump into the message
-                    box directly and come right back here when you are done.
-                  </p>
+          {hasMessagingAccess ? (
+            <>
+              <motion.section className="cp-thread-list cp-thread-list--page cp-surface" {...revealUp}>
+                <div className="cp-thread-list-head">
+                  <div>
+                    <span className="cp-eyebrow">Active conversations</span>
+                    <h2>Only live chats stay in this inbox.</h2>
+                    <p className="cp-text-muted">
+                      Your inbox stays focused now: no background threads, no roster-wide clutter,
+                      just conversations that already have a real fan message in them.
+                    </p>
+                  </div>
+
+                  <span className="cp-chip">
+                    <MessageSquareText size={14} />
+                    {visibleThreads.length} active conversation{visibleThreads.length === 1 ? '' : 's'}
+                  </span>
                 </div>
 
-                <span className="cp-chip">
-                  <MessageSquareText size={14} />
-                  {visibleThreads.length} unlocked thread{visibleThreads.length === 1 ? '' : 's'}
-                </span>
-              </div>
+                {visibleThreads.length ? (
+                  <div className="cp-thread-stack">
+                    {visibleThreads.map((thread) => (
+                      <Link
+                        key={thread.id}
+                        className="cp-thread-item"
+                        to={buildThreadLink(thread.id)}
+                      >
+                        <TalentAvatar
+                          sizes="48px"
+                          talent={{ name: thread.talentName, initials: thread.talentName.charAt(0) }}
+                        />
+                        <div className="cp-thread-copy">
+                          <strong>{thread.talentName}</strong>
+                          <span>{thread.preview || 'Open the latest conversation.'}</span>
+                        </div>
+                        <span className="cp-thread-time">
+                          {thread.lastActiveAt ? timeAgo(thread.lastActiveAt) : 'now'}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="cp-message-preview">
+                    No active conversations yet. Start one from the talent page or the starter flow
+                    below and it will appear here automatically.
+                  </div>
+                )}
+              </motion.section>
 
-              <div className="cp-thread-stack">
-                {visibleThreads.map((thread) => {
-                  const talent = getTalentSnapshotById(thread.talentId)
+              <motion.section className="cp-info-card cp-surface" {...revealUp}>
+                <div className="cp-thread-list-head">
+                  <div>
+                    <span className="cp-eyebrow">Start or resume</span>
+                    <h2>
+                      {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
+                        ? 'Search unlocked talents before opening a new conversation.'
+                        : 'Your unlocked talent is ready when you want to reach out.'}
+                    </h2>
+                    <p className="cp-text-muted">
+                      {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
+                        ? 'This keeps Crown Access scalable, fast, and closer to how major platforms handle inboxes.'
+                        : 'Opening the talent page lets you start the conversation when you are ready.'}
+                    </p>
+                  </div>
 
-                  return (
-                    <Link key={thread.id} className="cp-thread-item" to={`/messages/${thread.id}`}>
-                      <TalentAvatar
-                        sizes="48px"
-                        talent={talent ?? { name: thread.talentName, initials: thread.talentName.charAt(0) }}
-                      />
+                  <div className="cp-inline-trust">
+                    <span className="cp-chip">
+                      <Sparkles size={14} />
+                      {unlockedTalents.length} unlocked talent{unlockedTalents.length === 1 ? '' : 's'}
+                    </span>
+                    <span className="cp-chip">Search-first flow</span>
+                  </div>
+                </div>
+
+                {currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS ? (
+                  <>
+                    <TalentSearchFilters
+                      activeCategory={activeCategory}
+                      helperText={starterHelperText}
+                      onCategoryChange={setActiveCategory}
+                      onClear={clearFilters}
+                      onSearchChange={setSearchQuery}
+                      panelClassName="cp-filter-panel cp-surface cp-surface--soft"
+                      placeholder="Search unlocked talents by name, category, or location"
+                      searchQuery={searchQuery}
+                    />
+
+                    {!isQueryTooShort && filteredTalents.length ? (
+                      <div className="cp-thread-stack" style={{ marginTop: 18 }}>
+                        {filteredTalents.map((talent) => {
+                          const activeThread = threadByTalentId.get(Number(talent.id)) ?? null
+                          const target = activeThread
+                            ? buildThreadLink(activeThread.id)
+                            : `/talent/${talent.id}/messages`
+
+                          return (
+                            <Link key={talent.id} className="cp-thread-item" to={target}>
+                              <TalentAvatar sizes="48px" talent={talent} />
+                              <div className="cp-thread-copy">
+                                <strong>{talent.name}</strong>
+                                <span>
+                                  {activeThread
+                                    ? activeThread.preview || 'Resume your active conversation.'
+                                    : 'Open the talent page to send the first message and start the conversation.'}
+                                </span>
+                              </div>
+                              <div className="cp-admin-thread-meta">
+                                <span className="cp-thread-time">
+                                  {activeThread
+                                    ? `Active ${timeAgo(activeThread.lastActiveAt)}`
+                                    : 'Start conversation'}
+                                </span>
+                              </div>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                  </>
+                ) : singleUnlockedTalent ? (
+                  <div className="cp-thread-stack" style={{ marginTop: 18 }}>
+                    <Link
+                      className="cp-thread-item"
+                      to={
+                        threadByTalentId.get(Number(singleUnlockedTalent.id))
+                          ? buildThreadLink(threadByTalentId.get(Number(singleUnlockedTalent.id)).id)
+                          : `/talent/${singleUnlockedTalent.id}/messages`
+                      }
+                    >
+                      <TalentAvatar sizes="48px" talent={singleUnlockedTalent} />
                       <div className="cp-thread-copy">
-                        <strong>{thread.talentName}</strong>
-                        <span>{thread.preview}</span>
+                        <strong>{singleUnlockedTalent.name}</strong>
+                        <span>
+                          {threadByTalentId.get(Number(singleUnlockedTalent.id))
+                            ? 'Resume your active conversation from the talent page or your inbox.'
+                            : 'Open the talent page to send the first message and start the conversation.'}
+                        </span>
                       </div>
                       <span className="cp-thread-time">
-                        {thread.lastActiveAt ? timeAgo(thread.lastActiveAt) : 'now'}
+                        {threadByTalentId.get(Number(singleUnlockedTalent.id))
+                          ? 'Conversation active'
+                          : 'Start conversation'}
                       </span>
                     </Link>
-                  )
-                })}
-              </div>
-            </motion.section>
+                  </div>
+                ) : null}
+              </motion.section>
+            </>
           ) : (
             <div className="cp-empty-state">
               <div className="cp-container">
@@ -132,15 +305,15 @@ export default function Messages() {
           {currentPlan === MEMBERSHIP_PLANS.INNER_CIRCLE ? (
             <motion.div className="cp-locked-card cp-surface" {...revealUp}>
               <span className="cp-eyebrow">Upgrade option</span>
-              <h3>Upgrade to Crown Access to open every talent inbox.</h3>
+              <h3>Upgrade to Crown Access to search and message any unlocked talent on demand.</h3>
               <p>
-                If you want to go beyond one artist, Crown Access expands your access while keeping
-                everything in one private place.
+                Crown Access now keeps the inbox clean by letting you search first, then start the
+                specific conversation you want.
               </p>
               <div className="cp-inline-trust" style={{ marginTop: 18 }}>
                 <span className="cp-chip">
                   <Sparkles size={14} />
-                  Upgrade when you want more access
+                  Upgrade when you want broader access
                 </span>
               </div>
             </motion.div>

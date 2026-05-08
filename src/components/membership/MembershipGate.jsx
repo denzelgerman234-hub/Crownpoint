@@ -1,7 +1,6 @@
 import { ArrowRight, LockKeyhole, MessageSquareText, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { getUserThreadByTalent } from '../../services/messageService'
 import { MEMBERSHIP_PLANS } from '../../utils/constants'
 
 const buildMembershipLink = (plan, talentId) => {
@@ -24,15 +23,7 @@ export default function MembershipGate({ talent }) {
   const signInRedirect = encodeURIComponent(buildMembershipLink(MEMBERSHIP_PLANS.INNER_CIRCLE, talent.id))
   const canOpenThread = user && canMessage(talent.id)
   const isInnerCircleMember = currentPlan === MEMBERSHIP_PLANS.INNER_CIRCLE
-  const unlockedThread = canOpenThread
-    ? getUserThreadByTalent(user, talent, currentPlanLabel)
-    : null
-  const openInboxLink = unlockedThread
-    ? `/messages/${unlockedThread.id}?${new URLSearchParams({
-      back: `/talent/${talent.id}/messages`,
-      backLabel: 'Back to direct message',
-    }).toString()}`
-    : '/messages'
+  const openInboxLink = `/talent/${talent.id}/messages`
 
   return (
     <div className="cp-membership-gate cp-surface">
@@ -45,7 +36,7 @@ export default function MembershipGate({ talent }) {
         </h3>
         <p className="cp-text-muted">
           {canOpenThread
-            ? 'Open the inbox and keep the conversation moving without leaving the profile.'
+            ? 'Open the message desk here, continue any active conversation, or send the first note that starts one.'
             : 'Private messaging is reserved for Inner Circle and Crown Access, giving you a more personal and dedicated way to connect.'}
         </p>
 

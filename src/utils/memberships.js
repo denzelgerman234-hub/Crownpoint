@@ -90,11 +90,11 @@ export const getMembershipScopeCopy = (user, unlockedCount) => {
   const currentPlan = getCurrentPlan(user)
 
   if (currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS) {
-    return 'All talent inboxes unlocked'
+    return 'All talents available to message'
   }
 
   if (currentPlan === MEMBERSHIP_PLANS.INNER_CIRCLE) {
-    return `${unlockedCount || 1} talent inbox unlocked`
+    return `${unlockedCount || 1} talent available to message`
   }
 
   return 'Membership inbox locked'
