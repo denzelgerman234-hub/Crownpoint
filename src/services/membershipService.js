@@ -14,6 +14,7 @@ import {
   PAYMENT_METHODS,
 } from '../utils/constants'
 import { getCurrencyConfig, getCurrencyPreference } from '../utils/currency'
+import { canUserMessageTalent } from '../utils/memberships'
 import { getUserById, updateUserMembership } from './authService'
 
 const MEMBERSHIP_QUEUE_KEY = 'crownpoint_membership_queue'
@@ -194,6 +195,16 @@ const buildUnlockedTalents = (request) => {
   return request.talentId ? [Number(request.talentId)] : []
 }
 
+const hasActiveInnerCircleAccess = (user, talentId) => {
+  const normalizedTalentId = Number(talentId)
+
+  if (!user || !normalizedTalentId) {
+    return false
+  }
+
+  return canUserMessageTalent(user, normalizedTalentId)
+}
+
 const submitMembershipRequestLocally = ({
   userId,
   plan,
@@ -216,6 +227,10 @@ const submitMembershipRequestLocally = ({
 
   if (plan === MEMBERSHIP_PLANS.INNER_CIRCLE && !talentId) {
     throw new Error('Choose the talent you want unlocked for Inner Circle.')
+  }
+
+  if (plan === MEMBERSHIP_PLANS.INNER_CIRCLE && hasActiveInnerCircleAccess(user, talentId)) {
+    throw new Error('You already have active access to this talent.')
   }
 
   const talent = talentId ? getTalentSnapshotById(talentId) : null

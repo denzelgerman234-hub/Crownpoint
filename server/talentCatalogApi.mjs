@@ -1288,6 +1288,39 @@ const getMessageAccessTalentIds = (profile = {}, talents = []) => {
   return []
 }
 
+const getActiveMembershipPlanForProfile = (profile = {}) => {
+  const normalizedPlan = normalizeMembershipPlan(profile.plan, MEMBERSHIP_PLANS.FREE)
+
+  if (normalizedPlan === MEMBERSHIP_PLANS.FREE) {
+    return MEMBERSHIP_PLANS.FREE
+  }
+
+  const expiryTimestamp = profile.plan_expiry ? new Date(profile.plan_expiry).getTime() : null
+
+  if (expiryTimestamp && expiryTimestamp < Date.now()) {
+    return MEMBERSHIP_PLANS.FREE
+  }
+
+  return normalizedPlan
+}
+
+const hasActiveMembershipAccessForTalent = (profile = {}, talentId) => {
+  const normalizedTalentId = toNumberOrNull(talentId)
+  const normalizedPlan = getActiveMembershipPlanForProfile(profile)
+
+  if (!normalizedTalentId || normalizedPlan === MEMBERSHIP_PLANS.FREE) {
+    return false
+  }
+
+  if (normalizedPlan === MEMBERSHIP_PLANS.CROWN_ACCESS) {
+    return true
+  }
+
+  return Array.isArray(profile.talents_unlocked)
+    ? profile.talents_unlocked.map((item) => Number(item)).filter(Boolean).includes(normalizedTalentId)
+    : false
+}
+
 const fromThreadMessageRow = (record = {}) => ({
   id: toMessageRouteId(record.id),
   backendMessageId: Number(record.id) || 0,
@@ -1956,6 +1989,10 @@ const createMembershipRequestInSupabase = async (authUser, payload = {}) => {
 
     if (!talent) {
       throw createHttpError(404, 'Choose a valid talent before submitting your membership request.')
+    }
+
+    if (hasActiveMembershipAccessForTalent(profile, talentId)) {
+      throw createHttpError(409, 'You already have active access to this talent.')
     }
   }
 

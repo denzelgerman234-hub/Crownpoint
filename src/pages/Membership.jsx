@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Gift,
   Globe2,
   LockKeyhole,
+  Search,
   Upload,
   Wallet,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import BillingCycleToggle from '../components/membership/BillingCycleToggle'
 import PageWrapper from '../components/layout/PageWrapper'
 import StatusBadge from '../components/ui/StatusBadge'
+import TalentAvatar from '../components/ui/TalentAvatar'
 import {
   getMembershipPlanById,
   getMembershipPriceLabel,
@@ -28,6 +30,7 @@ import { useTalentRoster } from '../hooks/useTalentRoster'
 import { useToast } from '../hooks/useToast'
 import {
   getLatestMembershipRequest,
+  getUserMembershipRequests,
   refreshMembershipQueue,
   submitMembershipRequest,
   subscribeToMembershipUpdates,
@@ -63,6 +66,19 @@ const PAYMENT_TABS = [
 
 const paidPlans = membershipPlans.filter((plan) => plan.id !== MEMBERSHIP_PLANS.FREE)
 
+const normalizeTalentSearchQuery = (value = '') => value.trim().toLowerCase()
+
+const buildTalentSearchHaystack = (talent = {}) =>
+  [
+    talent.name,
+    talent.category,
+    talent.subcategory,
+    talent.location,
+    ...(talent.tags ?? []),
+  ]
+    .join(' ')
+    .toLowerCase()
+
 const renderMembershipPlanBody = ({ billingCycle, currencyCode, isSelected, plan }) => {
   const planPriceUsd = getMembershipPriceUsd(plan.id, billingCycle)
 
@@ -89,6 +105,7 @@ const renderMembershipPlanBody = ({ billingCycle, currencyCode, isSelected, plan
 export default function Membership() {
   const [searchParams, setSearchParams] = useSearchParams()
   const {
+    canMessage,
     currentPlan,
     currentPlanBillingCycleLabel,
     currentPlanLabel,
@@ -137,21 +154,106 @@ export default function Membership() {
   const [confirmed, setConfirmed] = useState(false)
   const [copiedField, setCopiedField] = useState(null)
   const [submittedRequest, setSubmittedRequest] = useState(null)
+  const [talentSearchQuery, setTalentSearchQuery] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const defaultInnerCircleTalentId = String(unlockedTalentIds[0] ?? talentRoster[0]?.id ?? '')
   const resolvedSelectedTalentId =
     selectedPlan !== MEMBERSHIP_PLANS.INNER_CIRCLE ||
     talentRoster.some((talent) => String(talent.id) === String(selectedTalentId))
       ? selectedTalentId
       : defaultInnerCircleTalentId
+  const membershipRequests = user
+    ? submittedRequest?.userId === Number(user.id)
+      ? [submittedRequest, ...getUserMembershipRequests(user.id).filter((item) => Number(item.id) !== Number(submittedRequest.id))]
+      : getUserMembershipRequests(user.id)
+    : []
   const latestRequest = user
     ? submittedRequest?.userId === Number(user.id)
       ? submittedRequest
       : getLatestMembershipRequest(user.id)
     : null
-  const hasPendingRequest = latestRequest?.status === MEMBERSHIP_STATUS.UNDER_REVIEW
+  const hasPendingRequest = membershipRequests.some((item) => item.status === MEMBERSHIP_STATUS.UNDER_REVIEW)
   const selectedPlanMeta = getMembershipPlanById(selectedPlan)
   const selectedPlanPriceUsd = getMembershipPriceUsd(selectedPlan, billingCycle)
   const unlockedCount = currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS ? talentRoster.length : unlockedTalentIds.length
+  const deferredTalentSearchQuery = useDeferredValue(talentSearchQuery)
+  const normalizedTalentSearchQuery = normalizeTalentSearchQuery(deferredTalentSearchQuery)
+  const selectedTalent = useMemo(
+    () =>
+      talentRoster.find((talent) => String(talent.id) === String(resolvedSelectedTalentId)) ?? null,
+    [resolvedSelectedTalentId, talentRoster],
+  )
+  const selectedTalentRequest = useMemo(() => {
+    if (selectedPlan !== MEMBERSHIP_PLANS.INNER_CIRCLE || !selectedTalent) {
+      return null
+    }
+
+    return (
+      membershipRequests.find(
+        (request) =>
+          request.plan === MEMBERSHIP_PLANS.INNER_CIRCLE &&
+          Number(request.talentId) === Number(selectedTalent.id),
+      ) ?? null
+    )
+  }, [membershipRequests, selectedPlan, selectedTalent])
+  const selectedTalentHasActiveAccess = Boolean(
+    selectedPlan === MEMBERSHIP_PLANS.INNER_CIRCLE &&
+    selectedTalent &&
+    canMessage(selectedTalent.id),
+  )
+  const selectedTalentState = useMemo(() => {
+    if (selectedPlan !== MEMBERSHIP_PLANS.INNER_CIRCLE || !selectedTalent) {
+      return null
+    }
+
+    if (selectedTalentHasActiveAccess) {
+      return currentPlan === MEMBERSHIP_PLANS.CROWN_ACCESS
+        ? {
+            kind: 'active',
+            title: `${selectedTalent.name} is already included in your Crown Access membership.`,
+            body: 'You already have access to this talent, so no new Inner Circle application is needed.',
+            label: 'Access active',
+            status: MEMBERSHIP_STATUS.APPROVED,
+          }
+        : {
+            kind: 'active',
+            title: `You are already a member of ${selectedTalent.name}'s Inner Circle.`,
+            body: 'This talent is already unlocked on your account, so you cannot submit another request for the same access.',
+            label: 'Member active',
+            status: MEMBERSHIP_STATUS.APPROVED,
+          }
+    }
+
+    if (selectedTalentRequest?.status === MEMBERSHIP_STATUS.UNDER_REVIEW) {
+      return {
+        kind: 'pending',
+        title: `${selectedTalent.name}'s Inner Circle request is already under review.`,
+        body: 'Your application for this talent is already in the queue. You do not need to submit another payment proof.',
+        label: 'Under review',
+        status: selectedTalentRequest.status,
+      }
+    }
+
+    return {
+      kind: 'available',
+      title: `${selectedTalent.name} is ready for a new Inner Circle application.`,
+      body: 'Complete the payment flow below to apply for this talent.',
+      label: 'Not yet unlocked',
+      status: selectedTalentRequest?.status ?? null,
+    }
+  }, [currentPlan, selectedPlan, selectedTalent, selectedTalentHasActiveAccess, selectedTalentRequest])
+  const filteredTalents = useMemo(() => {
+    if (!normalizedTalentSearchQuery) {
+      return []
+    }
+
+    return talentRoster
+      .filter((talent) => buildTalentSearchHaystack(talent).includes(normalizedTalentSearchQuery))
+      .slice(0, 8)
+  }, [normalizedTalentSearchQuery, talentRoster])
+  const shouldHideInnerCirclePaymentFlow =
+    selectedPlan === MEMBERSHIP_PLANS.INNER_CIRCLE &&
+    (selectedTalentState?.kind === 'active' || selectedTalentState?.kind === 'pending')
   const resolvedPaymentMethod =
     isPaymentMethodConfigured(paymentSettings, paymentMethod)
       ? paymentMethod
@@ -196,6 +298,11 @@ export default function Membership() {
     (resolvedPaymentMethod !== PAYMENT_METHODS.GIFT_CARD || (resolvedGiftCardBrand && giftCardCode.trim())) &&
     (resolvedPaymentMethod !== PAYMENT_METHODS.CRYPTO ||
       (resolvedCryptoAsset && resolvedCryptoNetwork && cryptoHash.trim()))
+  const isSubmitDisabled =
+    isSubmitting ||
+    !proofReady ||
+    hasPendingRequest ||
+    shouldHideInnerCirclePaymentFlow
 
   const handleCurrencyChange = (event) => {
     setCurrencyCode(event.target.value)
@@ -235,6 +342,7 @@ export default function Membership() {
 
   const handlePlanSelect = (planId) => {
     setSelectedPlan(planId)
+    setTalentSearchQuery('')
     syncSearchParams({ nextPlan: planId })
   }
 
@@ -243,10 +351,10 @@ export default function Membership() {
     syncSearchParams({ nextBillingCycle })
   }
 
-  const handleTalentChange = (event) => {
-    const nextTalentId = event.target.value
+  const handleTalentChange = (nextTalentId) => {
     setSelectedTalentId(nextTalentId)
     syncSearchParams({ nextTalentId })
+    setTalentSearchQuery('')
   }
 
   const handlePlanCardKeyDown = (event, planId) => {
@@ -307,8 +415,22 @@ export default function Membership() {
       return
     }
 
+    if (isSubmitting) {
+      return
+    }
+
     if (hasPendingRequest) {
       showToast('Your last membership request is still under review.', 'warning')
+      return
+    }
+
+    if (selectedTalentState?.kind === 'active') {
+      showToast('You already have active access to this talent.', 'warning')
+      return
+    }
+
+    if (selectedTalentState?.kind === 'pending') {
+      showToast('Your request for this talent is already under review.', 'warning')
       return
     }
 
@@ -360,6 +482,7 @@ export default function Membership() {
           : `Bank transfer proof uploaded as ${uploadedFile.name}`
 
     try {
+      setIsSubmitting(true)
       const proofUpload = await uploadPaymentProofFile({
         file: uploadedFile,
         category: 'membership',
@@ -383,6 +506,8 @@ export default function Membership() {
       showToast('Membership request submitted for review.', 'success')
     } catch (error) {
       showToast(error.message || 'We could not submit your membership request right now.', 'warning')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -489,21 +614,104 @@ export default function Membership() {
 
               {selectedPlan === MEMBERSHIP_PLANS.INNER_CIRCLE ? (
                 <div className="cp-membership-field">
-                  <label className="cp-payment-field-label" htmlFor="inner-circle-talent">
-                    Select the talent for your Inner Circle access
+                  <label className="cp-payment-field-label" htmlFor="inner-circle-talent-search">
+                    Search for the talent you want to unlock with Inner Circle
                   </label>
-                  <select
-                    className="cp-payment-input"
-                    id="inner-circle-talent"
-                    onChange={handleTalentChange}
-                    value={resolvedSelectedTalentId}
-                  >
-                    {talentRoster.map((talent) => (
-                      <option key={talent.id} value={talent.id}>
-                        {talent.name} - {talent.category}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="cp-filter-panel cp-surface cp-surface--soft cp-membership-talent-picker">
+                    <div className="cp-search">
+                      <Search size={18} />
+                      <input
+                        autoComplete="off"
+                        id="inner-circle-talent-search"
+                        inputMode="search"
+                        onChange={(event) => setTalentSearchQuery(event.target.value)}
+                        placeholder="Search by talent name, category, or location"
+                        type="search"
+                        value={talentSearchQuery}
+                      />
+                    </div>
+
+                    <div className="cp-search-meta">
+                      <p className="cp-search-helper">
+                        {selectedTalent
+                          ? `Selected talent: ${selectedTalent.name}. Search to switch to a different talent.`
+                          : 'Search for the talent you want to apply for, then choose it below.'}
+                      </p>
+                      {talentSearchQuery.trim() ? (
+                        <button
+                          className="cp-search-clear"
+                          onClick={() => setTalentSearchQuery('')}
+                          type="button"
+                        >
+                          Reset search
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {talentSearchQuery.trim() ? (
+                      filteredTalents.length ? (
+                        <div className="cp-thread-stack cp-membership-talent-results">
+                          {filteredTalents.map((talent) => {
+                            const hasActiveAccess = canMessage(talent.id)
+                            const isSelected = String(talent.id) === String(resolvedSelectedTalentId)
+
+                            return (
+                              <button
+                                key={talent.id}
+                                className={`cp-thread-item cp-thread-item--button${isSelected ? ' is-active' : ''}`}
+                                onClick={() => handleTalentChange(String(talent.id))}
+                                type="button"
+                              >
+                                <TalentAvatar sizes="48px" talent={talent} />
+                                <div className="cp-thread-copy">
+                                  <strong>{talent.name}</strong>
+                                  <span>
+                                    {[talent.category, talent.location].filter(Boolean).join(' / ')}
+                                  </span>
+                                </div>
+                                <span className="cp-thread-time">
+                                  {hasActiveAccess ? 'Access active' : 'Select talent'}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="cp-payment-inline-note">
+                          <Search size={14} />
+                          <span>No talents match that search yet.</span>
+                        </div>
+                      )
+                    ) : null}
+
+                    {selectedTalent ? (
+                      <div className="cp-membership-talent-selected cp-surface">
+                        <div className="cp-membership-talent-selected-head">
+                          <TalentAvatar sizes="56px" talent={selectedTalent} />
+                          <div className="cp-membership-talent-selected-copy">
+                            <span className="cp-eyebrow">Selected talent</span>
+                            <strong>{selectedTalent.name}</strong>
+                            <span>
+                              {[selectedTalent.category, selectedTalent.location].filter(Boolean).join(' / ')}
+                            </span>
+                          </div>
+                          <span className="cp-chip">{selectedTalentState?.label ?? 'Ready to apply'}</span>
+                        </div>
+
+                        {selectedTalentState ? (
+                          <div className="cp-membership-talent-state">
+                            <div>
+                              <h3>{selectedTalentState.title}</h3>
+                              <p className="cp-text-muted">{selectedTalentState.body}</p>
+                            </div>
+                            {selectedTalentState.status ? (
+                              <StatusBadge status={selectedTalentState.status} />
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -516,27 +724,29 @@ export default function Membership() {
                 </ul>
               </div>
 
-              <div className="cp-payment-tabs" style={{ marginTop: 24 }}>
-                {PAYMENT_TABS.map((tab) => {
-                  const Icon = tab.icon
-                  const isConfigured = isPaymentMethodConfigured(paymentSettings, tab.id)
+              {!shouldHideInnerCirclePaymentFlow ? (
+                <>
+                  <div className="cp-payment-tabs" style={{ marginTop: 24 }}>
+                    {PAYMENT_TABS.map((tab) => {
+                      const Icon = tab.icon
+                      const isConfigured = isPaymentMethodConfigured(paymentSettings, tab.id)
 
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`cp-tab-button${resolvedPaymentMethod === tab.id ? ' is-active' : ''}`}
-                      disabled={!isConfigured}
-                      onClick={() => isConfigured && setPaymentMethod(tab.id)}
-                      type="button"
-                    >
-                      <Icon size={14} />
-                      {tab.label}
-                    </button>
-                  )
-                })}
-              </div>
+                      return (
+                        <button
+                          key={tab.id}
+                          className={`cp-tab-button${resolvedPaymentMethod === tab.id ? ' is-active' : ''}`}
+                          disabled={!isConfigured}
+                          onClick={() => isConfigured && setPaymentMethod(tab.id)}
+                          type="button"
+                        >
+                          <Icon size={14} />
+                          {tab.label}
+                        </button>
+                      )
+                    })}
+                  </div>
 
-              <div className="cp-payment-content cp-surface cp-surface--soft">
+                  <div className="cp-payment-content cp-surface cp-surface--soft">
                 {resolvedPaymentMethod === PAYMENT_METHODS.BANK ? (
                   <div>
                     <p className="cp-section-label">Bank transfer details</p>
@@ -702,9 +912,9 @@ export default function Membership() {
                   placeholder="Example: Sent from the same account used for my previous renewal."
                   value={proofSummary}
                 />
-              </div>
+                  </div>
 
-              <div className="cp-upload-block">
+                  <div className="cp-upload-block">
                 <p className="cp-section-label">Upload proof of payment</p>
                 <div
                   className={`cp-upload-zone${uploadedFile ? ' has-file' : ''}`}
@@ -740,9 +950,9 @@ export default function Membership() {
                     type="file"
                   />
                 </div>
-              </div>
+                  </div>
 
-              <div className="cp-confirm-row">
+                  <div className="cp-confirm-row">
                 <input
                   checked={confirmed}
                   className="cp-confirm-checkbox"
@@ -753,16 +963,32 @@ export default function Membership() {
                 <label className="cp-confirm-label" htmlFor="confirm-membership">
                   I confirm that this membership payment proof is accurate and ready for review.
                 </label>
-              </div>
+                  </div>
 
-              <button
-                className={`cp-submit-payment${proofReady && !hasPendingRequest ? ' is-enabled' : ''}`}
-                disabled={!proofReady || hasPendingRequest}
-                onClick={handleSubmit}
-                type="button"
-              >
-                {hasPendingRequest ? 'Membership Under Review' : 'Submit Membership Application'}
-              </button>
+                  <button
+                    aria-busy={isSubmitting}
+                    className={`cp-submit-payment${proofReady && !hasPendingRequest ? ' is-enabled' : ''}${isSubmitting ? ' is-loading' : ''}`}
+                    disabled={isSubmitDisabled}
+                    onClick={handleSubmit}
+                    type="button"
+                  >
+                    {hasPendingRequest
+                      ? 'Membership Under Review'
+                      : isSubmitting
+                        ? 'Submitting Membership Application...'
+                        : 'Submit Membership Application'}
+                  </button>
+                </>
+              ) : (
+                <div className="cp-payment-inline-note" style={{ marginTop: 24 }}>
+                  <LockKeyhole size={14} />
+                  <span>
+                    {selectedTalentState?.kind === 'pending'
+                      ? 'This Inner Circle request is already under review for the selected talent.'
+                      : 'This talent is already active on your membership, so no additional payment flow is needed.'}
+                  </span>
+                </div>
+              )}
             </motion.article>
             </div>
 
