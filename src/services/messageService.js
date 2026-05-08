@@ -22,6 +22,7 @@ const MESSAGE_API_START_HINT =
   'Start `npm run api` so messages can persist through the backend API.'
 const MESSAGE_BACKEND_ENABLED = SUPABASE_AUTH_ENABLED
 const MESSAGE_LOCAL_FALLBACKS_ENABLED = LOCAL_BACKEND_FALLBACKS_ENABLED
+const MESSAGE_REFRESH_INTERVAL_MS = 5000
 
 const MESSAGE_ROLES = {
   FAN: 'fan',
@@ -58,6 +59,7 @@ const defaultThread = {
 }
 
 let hasWarnedMessageBackendUnavailable = false
+let hasWarnedBackgroundMessageRefreshFailure = false
 
 const trimText = (value) => String(value ?? '').trim()
 
@@ -84,6 +86,17 @@ const warnMessageBackendUnavailable = (error) => {
   hasWarnedMessageBackendUnavailable = true
   console.warn(
     `Falling back to the cached message view because the backend API is unavailable. ${readApiErrorMessage(error, MESSAGE_API_START_HINT)}`,
+  )
+}
+
+const warnBackgroundMessageRefreshFailure = (error) => {
+  if (hasWarnedBackgroundMessageRefreshFailure) {
+    return
+  }
+
+  hasWarnedBackgroundMessageRefreshFailure = true
+  console.warn(
+    `Live message refresh hit a problem. ${readApiErrorMessage(error, 'We could not refresh messages right now.')}`,
   )
 }
 
@@ -333,6 +346,15 @@ const sortThreadsByActivity = (threads) =>
       new Date(left.lastActiveAt ?? 0).getTime(),
   )
 
+const normalizeThreadsCollection = (threads) =>
+  sortThreadsByActivity(
+    stripLegacySeedThreads(
+      Array.isArray(threads) ? threads.map(normalizeThreadRecord) : [],
+    ),
+  )
+
+const serializeThreads = (threads) => JSON.stringify(threads)
+
 const buildInitialMembershipThread = ({ user, talent, currentPlanLabel }) => {
   const createdAt = new Date().toISOString()
   const threadId = buildThreadId(user.id, talent.id)
@@ -393,23 +415,93 @@ const syncThreadParticipants = (thread, user, accessibleTalentIds, currentPlanLa
 }
 
 let threadsCache = sortThreadsByActivity(readMessageThreads())
+let messageUpdateSubscriberCount = 0
+let messageAutoRefreshIntervalId = null
+let messageAutoRefreshPromise = null
 
 const syncThreadsCache = (threads, { emit = false, persist = true } = {}) => {
-  threadsCache = sortThreadsByActivity(
-    stripLegacySeedThreads(
-      Array.isArray(threads) ? threads.map(normalizeThreadRecord) : [],
-    ),
-  )
+  const nextThreads = normalizeThreadsCollection(threads)
+  const threadsChanged = serializeThreads(threadsCache) !== serializeThreads(nextThreads)
 
-  if (persist && MESSAGE_LOCAL_FALLBACKS_ENABLED) {
+  threadsCache = nextThreads
+
+  if (persist && MESSAGE_LOCAL_FALLBACKS_ENABLED && threadsChanged) {
     writeMessageThreadsSilently(threadsCache)
   }
 
-  if (emit) {
+  if (emit && threadsChanged) {
     emitMessageUpdate()
   }
 
   return threadsCache
+}
+
+const handleMessageAutoRefreshVisibilityChange = () => {
+  if (typeof document === 'undefined' || document.visibilityState !== 'visible') {
+    return
+  }
+
+  void runBackgroundMessageRefresh()
+}
+
+const stopMessageAutoRefresh = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (messageAutoRefreshIntervalId) {
+    window.clearInterval(messageAutoRefreshIntervalId)
+    messageAutoRefreshIntervalId = null
+  }
+
+  window.removeEventListener('visibilitychange', handleMessageAutoRefreshVisibilityChange)
+  window.removeEventListener('focus', handleMessageAutoRefreshVisibilityChange)
+}
+
+const startMessageAutoRefresh = () => {
+  if (
+    !MESSAGE_BACKEND_ENABLED ||
+    typeof window === 'undefined' ||
+    messageAutoRefreshIntervalId
+  ) {
+    return
+  }
+
+  messageAutoRefreshIntervalId = window.setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return
+    }
+
+    void runBackgroundMessageRefresh()
+  }, MESSAGE_REFRESH_INTERVAL_MS)
+
+  window.addEventListener('visibilitychange', handleMessageAutoRefreshVisibilityChange)
+  window.addEventListener('focus', handleMessageAutoRefreshVisibilityChange)
+}
+
+async function runBackgroundMessageRefresh() {
+  if (!MESSAGE_BACKEND_ENABLED) {
+    return getMessageThreads()
+  }
+
+  if (messageAutoRefreshPromise) {
+    return messageAutoRefreshPromise
+  }
+
+  messageAutoRefreshPromise = refreshMessageThreads()
+    .then((threads) => {
+      hasWarnedBackgroundMessageRefreshFailure = false
+      return threads
+    })
+    .catch((error) => {
+      warnBackgroundMessageRefreshFailure(error)
+      return getMessageThreads()
+    })
+    .finally(() => {
+      messageAutoRefreshPromise = null
+    })
+
+  return messageAutoRefreshPromise
 }
 
 const getBackendThreadId = (threadOrId) => {
@@ -523,10 +615,21 @@ export const subscribeToMessageUpdates = (listener) => {
 
   window.addEventListener(MESSAGE_UPDATED_EVENT, handleUpdate)
   window.addEventListener('storage', handleStorage)
+  messageUpdateSubscriberCount += 1
+  startMessageAutoRefresh()
+
+  if (messageUpdateSubscriberCount === 1) {
+    void runBackgroundMessageRefresh()
+  }
 
   return () => {
     window.removeEventListener(MESSAGE_UPDATED_EVENT, handleUpdate)
     window.removeEventListener('storage', handleStorage)
+    messageUpdateSubscriberCount = Math.max(0, messageUpdateSubscriberCount - 1)
+
+    if (messageUpdateSubscriberCount === 0) {
+      stopMessageAutoRefresh()
+    }
   }
 }
 
