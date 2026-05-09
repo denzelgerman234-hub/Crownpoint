@@ -29,6 +29,7 @@ const experienceIcons = {
 }
 
 const heroImage = 'https://images.unsplash.com/photo-1753030768124-dba306907bba?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=80&w=1600'
+const sponsors = ['Amazon', 'Sony', 'YouTube', 'Meta', 'Spotify', 'TikTok', 'Samsung']
 
 const parseStatValue = (value = '') => {
   const match = value.match(/^([^0-9]*)([\d,.]+)(.*)$/)
@@ -77,6 +78,110 @@ const formatStatValue = (parsedValue, amount) => {
   return parsedValue.decimals > 0
     ? `${parsedValue.prefix}${normalizedWhole}.${fractionalPart}${parsedValue.suffix}`
     : `${parsedValue.prefix}${normalizedWhole}${parsedValue.suffix}`
+}
+
+function SponsorLogo({ sponsor }) {
+  if (sponsor === 'Meta') {
+    return (
+      <span aria-hidden="true" className="cp-sponsor-logo cp-sponsor-logo--glyph">
+        ∞
+      </span>
+    )
+  }
+
+  if (sponsor === 'Samsung') {
+    return (
+      <span aria-hidden="true" className="cp-sponsor-logo cp-sponsor-logo--badge">
+        S
+      </span>
+    )
+  }
+
+  if (sponsor === 'Sony') {
+    return (
+      <span
+        aria-hidden="true"
+        className="cp-sponsor-logo cp-sponsor-logo--badge cp-sponsor-logo--badge-square"
+      >
+        S
+      </span>
+    )
+  }
+
+  return (
+    <span aria-hidden="true" className="cp-sponsor-logo">
+      {sponsor === 'Amazon' ? (
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M4.5 15.5c4.1 3.3 10.9 3.3 15 0"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+          />
+          <path
+            d="m16.9 13.9 2.6 1.7-1.8 2.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
+      ) : null}
+
+      {sponsor === 'YouTube' ? (
+        <svg viewBox="0 0 24 24">
+          <rect
+            x="3"
+            y="6.5"
+            width="18"
+            height="11"
+            rx="3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path d="M10 9.4 15.5 12 10 14.6Z" fill="currentColor" />
+        </svg>
+      ) : null}
+
+      {sponsor === 'Spotify' ? (
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M5.5 9.7c4.1-1.3 8.5-.9 12.3 1.1"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M7 13c3-.9 6.2-.6 8.9 1"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.6"
+          />
+          <path
+            d="M8.4 16c1.9-.6 4-.4 5.8.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.4"
+          />
+        </svg>
+      ) : null}
+
+      {sponsor === 'TikTok' ? (
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M13.4 4.6c.4 1.9 1.9 3.5 3.9 3.9v2c-1.4-.1-2.8-.6-3.9-1.4v5.7a3.8 3.8 0 1 1-2-3.4V4.6Z"
+            fill="currentColor"
+          />
+        </svg>
+      ) : null}
+    </span>
+  )
 }
 
 function CountUpStat({ start, value }) {
@@ -199,6 +304,30 @@ export default function Home() {
               </div>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      <section className="cp-sponsor-strip" aria-label="Sponsors">
+        <div className="cp-container">
+          <div className="cp-sponsor-marquee">
+            <div className="cp-sponsor-track">
+              {[0, 1].map((copyIndex) => (
+                <div
+                  key={copyIndex}
+                  aria-hidden={copyIndex === 1}
+                  className="cp-sponsor-line"
+                >
+                  <span className="cp-sponsor-label">Sponsored by:</span>
+                  {sponsors.map((sponsor) => (
+                    <span key={`${copyIndex}-${sponsor}`} className="cp-sponsor-name">
+                      <SponsorLogo sponsor={sponsor} />
+                      {sponsor}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 

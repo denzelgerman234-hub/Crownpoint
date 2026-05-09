@@ -925,6 +925,104 @@ select optgroup {
   font-weight: 400;
 }
 
+.cp-sponsor-strip {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 0 18px;
+  background: linear-gradient(180deg, rgba(6, 26, 16, 0.96) 0%, rgba(6, 26, 16, 0.82) 100%);
+}
+
+.cp-sponsor-marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0, black 8%, black 92%, transparent 100%);
+}
+
+.cp-sponsor-track {
+  display: flex;
+  width: max-content;
+  animation: cp-sponsor-scroll 28s linear infinite;
+}
+
+.cp-sponsor-line {
+  flex: none;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  padding-right: 88px;
+  color: #7F9690;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cp-sponsor-label,
+.cp-sponsor-name {
+  flex: none;
+}
+
+.cp-sponsor-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cp-sponsor-logo {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: currentColor;
+}
+
+.cp-sponsor-logo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cp-sponsor-logo--glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.cp-sponsor-logo--badge {
+  min-width: 20px;
+  width: auto;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.cp-sponsor-logo--badge-square {
+  border-radius: 6px;
+}
+
+@keyframes cp-sponsor-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-sponsor-track {
+    animation: none;
+  }
+}
+
 .cp-stats-bar {
   position: relative;
   padding-top: 28px;
@@ -4969,6 +5067,37 @@ select optgroup {
     gap: 8px;
     font-size: 9px;
     letter-spacing: 0.14em;
+  }
+
+  .cp-sponsor-strip {
+    padding: 8px 0 14px;
+  }
+
+  .cp-sponsor-line {
+    gap: 24px;
+    padding-right: 56px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+  }
+
+  .cp-sponsor-name {
+    gap: 8px;
+  }
+
+  .cp-sponsor-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .cp-sponsor-logo--glyph {
+    font-size: 16px;
+  }
+
+  .cp-sponsor-logo--badge {
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 7px;
   }
 
   .cp-stats-bar {
