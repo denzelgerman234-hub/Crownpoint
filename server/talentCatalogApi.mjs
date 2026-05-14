@@ -2607,14 +2607,17 @@ const addReviewToTalentInFile = async (talentId, reviewPayload) => {
 }
 
 const listTalentsFromSupabase = async () => {
-  const { data, error } = await supabaseAdmin
-    .from(TALENTS_TABLE)
-    .select('*')
-    .order('id', { ascending: true })
-
-  if (error) {
-    throw createHttpError(502, `Supabase talent read failed: ${error.message}`)
-  }
+  const data = await readAllSupabaseRows(
+    (from, to) =>
+      supabaseAdmin
+        .from(TALENTS_TABLE)
+        .select('*')
+        .order('id', { ascending: true })
+        .range(from, to),
+    {
+      errorMessage: 'Supabase talent read failed',
+    },
+  )
 
   return (data ?? []).map((record, index) =>
     normalizeTalentRecord(fromSupabaseTalentRecord(record), index),

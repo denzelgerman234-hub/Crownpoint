@@ -25,10 +25,13 @@ const TALENT_MUTATION_API_START_HINT =
   'Start `npm run api` so talent edits and review submissions can write through the local server.'
 const TALENT_LOAD_ERROR_MESSAGE = 'We could not load the talent roster right now.'
 const TALENT_SAVE_ERROR_MESSAGE = 'We could not save those talent changes right now.'
+const TALENT_LIVE_ROSTER_MISMATCH_MESSAGE =
+  'The talent save finished, but the live roster did not pick up the new record. This usually means the admin API is writing to the file catalog while the app is reading Supabase. Start the API with `npm run api` locally or enable the Supabase talent env vars on the API host.'
 const TALENT_CATALOG_FALLBACK_URL = '/data/talents.catalog.json'
 const TALENT_FEATURED_FALLBACK_URL = '/data/talents.featured.json'
 const FEATURED_TALENT_LIMIT = 6
 const TALENT_SUPABASE_TABLE = 'talents'
+const SUPABASE_TALENT_PAGE_SIZE = 1000
 
 const prepareTalentRoster = (records = []) =>
   normalizeTalentCollection(
@@ -149,17 +152,39 @@ const fromSupabaseTalentRecord = (record = {}) => ({
   completedBookings: normalizeNonNegativeNumber(record.completed_bookings, 0),
 })
 
-const fetchTalentsFromSupabase = async () => {
-  const { data, error } = await supabase
-    .from(TALENT_SUPABASE_TABLE)
-    .select('*')
-    .order('id', { ascending: true })
+const readAllSupabaseTalentRows = async (buildQuery) => {
+  const rows = []
+  let pageIndex = 0
 
-  if (error) {
-    throw error
+  while (true) {
+    const from = pageIndex * SUPABASE_TALENT_PAGE_SIZE
+    const to = from + SUPABASE_TALENT_PAGE_SIZE - 1
+    const { data, error } = await buildQuery().range(from, to)
+
+    if (error) {
+      throw error
+    }
+
+    const nextRows = data ?? []
+    rows.push(...nextRows)
+
+    if (nextRows.length < SUPABASE_TALENT_PAGE_SIZE) {
+      return rows
+    }
+
+    pageIndex += 1
   }
+}
 
-  return syncTalentRosterCache((data ?? []).map(fromSupabaseTalentRecord))
+const fetchTalentsFromSupabase = async () => {
+  const rows = await readAllSupabaseTalentRows(() =>
+    supabase
+      .from(TALENT_SUPABASE_TABLE)
+      .select('*')
+      .order('id', { ascending: true }),
+  )
+
+  return syncTalentRosterCache(rows.map(fromSupabaseTalentRecord))
 }
 
 const fetchFeaturedTalentsFromSupabase = async (limit = FEATURED_TALENT_LIMIT) => {
@@ -418,7 +443,8 @@ export const filterByCategory = async (category) => {
 }
 
 export const addTalent = async (talent) =>
-  persistMutation(async () => {
+  {
+    const createdTalent = await persistMutation(async () => {
     const payload = buildTalentPayload({ id: talent.id ?? Date.now() }, talent, talentRosterCache.length)
     const response = await api.post('/talents', payload)
     const createdTalentId = Number(response.data?.id)
@@ -427,6 +453,15 @@ export const addTalent = async (talent) =>
       ? getTalentFromCache(createdTalentId) ?? normalizeTalent(response.data, talentRosterCache.length)
       : normalizeTalent(response.data, talentRosterCache.length)
   })
+
+    const syncedTalent = Number.isFinite(createdTalent?.id) ? getTalentFromCache(createdTalent.id) : null
+
+    if (SUPABASE_TALENTS_ENABLED && !syncedTalent) {
+      throw new Error(TALENT_LIVE_ROSTER_MISMATCH_MESSAGE)
+    }
+
+    return syncedTalent ?? createdTalent
+  }
 
 export const updateTalent = async (talentId, talent) => {
   const resolvedTalentId = requireValidTalentId(talentId)

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "start": "node server/talentCatalogApi.mjs",
+    "start": "node --env-file=.env.local server/talentCatalogApi.mjs",
     "api": "node --env-file=.env.local server/talentCatalogApi.mjs",
     "build": "vite build",
     "test": "node scripts/backendSmokeTest.mjs",

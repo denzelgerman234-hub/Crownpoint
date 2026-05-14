@@ -12,7 +12,7 @@ import {
 } from '../../services/messageService'
 import { getTalentSnapshotById } from '../../services/talentService'
 import MessageAttachmentList from '../ui/MessageAttachmentList'
-import MessageComposer from '../ui/MessageComposer'
+import MessageComposer from '../ui/MessageComposer.jsx'
 import TalentAvatar from '../ui/TalentAvatar'
 import TalentSearchFilters from '../ui/TalentSearchFilters'
 import { timeAgo } from '../../utils/formatters'
