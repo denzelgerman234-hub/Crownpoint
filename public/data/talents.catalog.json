@@ -56924,5 +56924,67 @@
     "rating": 5,
     "reviewCount": 0,
     "completedBookings": 0
+  },
+  {
+    "id": 1002,
+    "wikidataId": "Q270712",
+    "sourceItem": "http://www.wikidata.org/entity/Q270712",
+    "name": "Mickie James",
+    "aliases": [
+      "Mickie Laree James",
+      "Mickie Laree James-Aldis",
+      "Alexis Laree"
+    ],
+    "category": "Sports",
+    "subcategory": "Wrestler",
+    "initials": "MJ",
+    "bio": "American country singer and professional wrestler",
+    "avatarUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Mickie%20James%20in%20April%202018.jpeg",
+    "avatarOriginalUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Mickie%20James%20in%20April%202018.jpeg",
+    "avatarThumbnailUrl": "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Mickie_James_in_April_2018.jpeg&width=250",
+    "avatarSrcSet": "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Mickie_James_in_April_2018.jpeg&width=120 120w, https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Mickie_James_in_April_2018.jpeg&width=250 250w, https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Mickie_James_in_April_2018.jpeg&width=500 500w",
+    "gradient": "linear-gradient(135deg, #1d523b, #0b2618)",
+    "location": "United States",
+    "languages": [],
+    "tags": [
+      "Sports",
+      "Wrestler",
+      "Musician",
+      "United States",
+      "Known Aliases"
+    ],
+    "popularityScore": 50,
+    "responseTime": "24h",
+    "startingPrice": 1550,
+    "available": true,
+    "verified": true,
+    "shopLink": "https://www.amazon.com/s?k=mickie+james",
+    "services": [],
+    "eventBooking": {
+      "available": true,
+      "appearanceFee": 6200,
+      "premiumLabel": "Premium star",
+      "responseCommitment": "During normal business hours, we respond to most inquiries within 4 hours.",
+      "intro": "We are happy to assist with booking inquiries. Share the event details, your approximate budget, and your organiser information so our team can review availability and come back to you promptly.",
+      "eventTypes": [
+        "Meet & greet",
+        "Corporate event",
+        "Festival appearance",
+        "Private celebration",
+        "Brand campaign"
+      ],
+      "budgetOptions": [
+        "$5,000 - $10,000",
+        "$10,000 - $25,000",
+        "$25,000 - $50,000",
+        "$50,000 and above"
+      ],
+      "logisticsNotes": "Include the event date, venue city, expected audience, and any hospitality or travel notes that matter for the booking review."
+    },
+    "shopItems": [],
+    "reviews": [],
+    "rating": 4.7,
+    "reviewCount": 58,
+    "completedBookings": 281
   }
 ]

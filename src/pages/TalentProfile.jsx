@@ -94,6 +94,31 @@ export default function TalentProfile() {
     mobileRelatedStartIndex + 2,
   )
   const showMobileRelatedNavigation = featuredRelatedTalents.length > 2
+  const profileMetaItems = [
+    talent.location ? (
+      <span key="location">
+        <MapPin size={12} />
+        {talent.location}
+      </span>
+    ) : null,
+    talent.languages.length ? (
+      <span key="languages">
+        <Globe2 size={12} />
+        {talent.languages.join(', ')}
+      </span>
+    ) : null,
+    talent.rating > 0 ? (
+      <span key="rating">
+        <Star size={12} />
+        {talent.rating.toFixed(1)} / 5 public rating
+      </span>
+    ) : null,
+    talent.completedBookings > 0 ? (
+      <span key="completed-bookings">
+        {talent.completedBookings.toLocaleString()} completed experiences
+      </span>
+    ) : null,
+  ].filter(Boolean)
 
   const renderSelectedServiceCard = (className = '') => (
     <motion.div
@@ -192,21 +217,7 @@ export default function TalentProfile() {
       <motion.article className="cp-info-card cp-surface cp-talent-section--profile" {...revealUp}>
         <span className="cp-eyebrow">Profile details</span>
         <h3>Key details at a glance</h3>
-        <div className="cp-meta-row">
-          <span>
-            <MapPin size={12} />
-            {talent.location}
-          </span>
-          <span>
-            <Globe2 size={12} />
-            {talent.languages.join(', ')}
-          </span>
-          <span>
-            <Star size={12} />
-            {talent.rating.toFixed(1)} / 5 public rating
-          </span>
-          <span>{talent.completedBookings.toLocaleString()} completed experiences</span>
-        </div>
+        <div className="cp-meta-row">{profileMetaItems}</div>
         <div className="cp-tag-row">
           {talent.tags.map((tag) => (
             <span key={tag} className="cp-tag">

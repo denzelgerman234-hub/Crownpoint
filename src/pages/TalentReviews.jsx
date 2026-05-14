@@ -204,10 +204,12 @@ export default function TalentReviews() {
           </p>
 
           <div className="cp-price-row">
-            <div>
-              <strong>{talent.completedBookings.toLocaleString()}</strong>
-              <span>completed experiences</span>
-            </div>
+            {talent.completedBookings > 0 ? (
+              <div>
+                <strong>{talent.completedBookings.toLocaleString()}</strong>
+                <span>completed experiences</span>
+              </div>
+            ) : null}
             <span>{talent.responseTime} response pace</span>
           </div>
 
